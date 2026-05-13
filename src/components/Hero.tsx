@@ -2,9 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
+import { motion } from 'framer-motion';
+import { Button } from './ui';
+import { useRouter } from 'next/navigation';
 
 const Hero = () => {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const router = useRouter();
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -35,8 +39,8 @@ const Hero = () => {
         <div 
           className="relative w-full h-[85%] max-w-[1600px] mx-auto pointer-events-auto group/hero-img"
         >
-          <div 
-            className="w-full h-full relative translate-y-[20%] group-hover/hero-img:translate-y-[8%] transition-transform duration-1000 cubic-bezier(0.16, 1, 0.3, 1)"
+          <motion.div 
+            className="w-full h-full relative translate-y-[20%] group-hover/hero-img:translate-y-[8%] transition-transform duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)]"
             style={{ 
               transform: `translate(${mousePos.x * -0.5}px, ${mousePos.y * -0.5}px) translateY(var(--tw-translate-y))`,
             }}
@@ -45,52 +49,85 @@ const Hero = () => {
               src="/Gemini_Generated_Image_ucjfxbucjfxbucjfs.png" 
               alt="Hero Background" 
               fill
-              className="object-contain object-bottom opacity-100"
+              className="object-contain object-bottom opacity-100 scale-105"
               priority
             />
-          </div>
+          </motion.div>
         </div>
       </div>
       
       {/* Content */}
-      <div 
-        className="relative z-20 flex flex-col items-center text-center px-4 max-w-5xl mx-auto -mt-32 transition-transform duration-300 ease-out"
-        style={{ transform: `translate(${mousePos.x}px, ${mousePos.y}px)` }}
+      <motion.div 
+        className="relative z-20 flex flex-col items-center text-center px-4 max-w-5xl mx-auto -mt-32"
       >
-        <div className="bg-[#cdb4ff] text-[#4a2e8c] text-[11px] font-bold tracking-[0.15em] uppercase px-3 py-1 rounded-md mb-8 shadow-sm animate-fade-in-up">
+        <motion.div 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="bg-[#cdb4ff] text-[#4a2e8c] text-[11px] font-bold tracking-[0.15em] uppercase px-4 py-1.5 rounded-full mb-8 shadow-sm"
+        >
           Walrus Sessions Hackathon
-        </div>
+        </motion.div>
         
-        <h1 className="text-[4.5rem] md:text-[7rem] leading-[1] font-bold tracking-[-0.04em] mb-6 text-black max-w-5xl mx-auto flex flex-wrap justify-center gap-x-6">
+        <h1 className="text-[4.5rem] md:text-[8.5rem] leading-[0.9] font-syne font-extrabold tracking-[-0.05em] mb-8 text-black max-w-5xl mx-auto flex flex-wrap justify-center gap-x-6">
           {headingWords.map((word, i) => (
-            <span key={i} className="animate-text-reveal">
-              <span style={{ animationDelay: `${i * 0.1}s` }}>{word}</span>
-            </span>
+            <motion.span 
+              key={i} 
+              initial={{ y: 80, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: i * 0.1, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            >
+              {word}
+            </motion.span>
           ))}
         </h1>
         
-        <p className="text-[20px] md:text-[26px] text-black/70 font-medium tracking-tight max-w-[900px] overflow-hidden leading-relaxed">
-          <span className="block animate-text-reveal">
-            <span style={{ animationDelay: '0.4s' }}>
-              A fully decentralized, Network-native feedback and form platform built on the Walrus Protocol. Securely collect structured feedback directly from your community.
-            </span>
-          </span>
-        </p>
+        <motion.p 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="text-[20px] md:text-[24px] text-black/60 font-jakarta font-medium tracking-tight max-w-[850px] leading-relaxed mb-12"
+        >
+          A fully decentralized, Network-native feedback and form platform built on the Walrus Protocol. Securely collect structured feedback directly from your community.
+        </motion.p>
 
-        {/* Animated Button with circulating line */}
-        <div className="mt-12 relative group inline-flex p-[3px] overflow-hidden rounded-full cursor-pointer shadow-[0_0_20px_rgba(57,59,178,0.1)] hover:shadow-[0_0_30px_rgba(57,59,178,0.3)] transition-shadow duration-300 animate-fade-in-up" style={{ animationDelay: '0.8s' }}>
-          <span className="absolute inset-[-1000%] animate-rotate-border bg-[conic-gradient(from_90deg_at_50%_50%,#E2CBFF_0%,#393BB2_50%,#E2CBFF_100%)]" />
-          <button className="relative bg-white/95 backdrop-blur-xl text-gray-900 px-12 py-5 rounded-full text-[21px] font-bold flex items-center gap-3 transition-all hover:bg-white w-full h-full">
-            Create Form 
-            <svg className="animate-bounce-x" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </button>
-        </div>
-      </div>
+        <motion.div 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          className="flex items-center gap-4"
+        >
+          <Button 
+            onClick={() => router.push('/builder')}
+            className="!px-12 !py-6 !text-[20px] shadow-2xl"
+            icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>}
+          >
+            Create Session
+          </Button>
+          <Button 
+            variant="ghost"
+            onClick={() => router.push('/templates')}
+            className="!px-8 !py-6 !text-[20px] border-black/10"
+          >
+            Templates
+          </Button>
+        </motion.div>
+      </motion.div>
       
+      {/* Scroll Indicator */}
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1.5 }}
+        className="absolute bottom-12 flex flex-col items-center gap-3"
+      >
+        <span className="text-[10px] font-jakarta font-bold text-black/30 uppercase tracking-[0.2em]">Scroll to explore</span>
+        <div className="w-[1px] h-12 bg-gradient-to-b from-black/20 to-transparent" />
+      </motion.div>
+
       <div className="absolute bottom-8 right-8 z-20">
-        <button className="bg-white text-black px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-2 shadow-sm hover:bg-gray-50 transition-colors">
+        <button className="glass-card !bg-white/50 !px-4 !py-2 !rounded-full text-sm font-jakarta font-bold flex items-center gap-2 shadow-sm hover:bg-white transition-colors border-white/40">
           English 
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
         </button>
       </div>
     </main>
@@ -98,3 +135,4 @@ const Hero = () => {
 };
 
 export default Hero;
+

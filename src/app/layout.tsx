@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Outfit, Plus_Jakarta_Sans, Syne, DM_Mono } from "next/font/google";
 import "./globals.css";
+import { Providers } from "./providers";
 
 const outfit = Outfit({ 
   subsets: ["latin"],
@@ -36,9 +37,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${outfit.variable} ${jakarta.variable} ${syne.variable} ${dmMono.variable} antialiased selection:bg-[#cdb4ff] selection:text-[#4a2e8c]`}>
-        <div className="relative z-10 min-h-screen">
-          {children}
-        </div>
+        <Providers>
+          <div className="relative z-10 min-h-screen">
+            {children}
+          </div>
+        </Providers>
       </body>
     </html>
   );

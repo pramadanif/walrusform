@@ -1,144 +1,327 @@
 "use client";
 
-import React, { useState } from 'react';
-import { GlassCard, Button } from '@/components/ui';
+import React, { useState, useEffect } from 'react';
+import { GlassCard, Button, Badge } from '@/components/ui';
 import { useRouter } from 'next/navigation';
+import { useCurrentAccount, ConnectButton } from '@mysten/dapp-kit';
+import AppBackground from '@/components/AppBackground';
+import Navbar from '@/components/Navbar';
+import { motion, AnimatePresence } from 'framer-motion';
 
-const TABS = ['Profile', 'Team', 'Encryption (Seal)', 'Notifications', 'Export & Data', 'Danger Zone'];
+// ─── Icons ──────────────────────────────────────────────────────────────────
+
+const ProfileIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
+const TeamIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
+const LockIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
+const BellIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>;
+const DatabaseIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>;
+const TrashIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>;
+
+
+const TABS = [
+  { id: 'Profile', icon: <ProfileIcon /> },
+  { id: 'Team', icon: <TeamIcon /> },
+  { id: 'Encryption (Seal)', icon: <LockIcon /> },
+  { id: 'Notifications', icon: <BellIcon /> },
+  { id: 'Export & Data', icon: <DatabaseIcon /> },
+  { id: 'Danger Zone', icon: <TrashIcon /> }
+];
+
+const SEAL_WALLETS_KEY = 'walrusform_seal_wallets';
+const TEAM_KEY = 'walrusform_team';
+
+function getSealWallets(): string[] {
+  if (typeof window === 'undefined') return [];
+  try { return JSON.parse(localStorage.getItem(SEAL_WALLETS_KEY) ?? '[]'); } catch { return []; }
+}
+function saveSealWallets(ws: string[]) {
+  localStorage.setItem(SEAL_WALLETS_KEY, JSON.stringify(ws));
+}
+function getTeamMembers(): { address: string; role: string }[] {
+  if (typeof window === 'undefined') return [];
+  try { return JSON.parse(localStorage.getItem(TEAM_KEY) ?? '[]'); } catch { return []; }
+}
+function saveTeamMembers(members: { address: string; role: string }[]) {
+  localStorage.setItem(TEAM_KEY, JSON.stringify(members));
+}
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('Profile');
   const router = useRouter();
+  const account = useCurrentAccount();
+
+  // Seal policy state
+  const [sealWallets, setSealWallets] = useState<string[]>([]);
+  const [newWallet, setNewWallet] = useState('');
+  const [sealSaved, setSealSaved] = useState(false);
+
+  // Team state
+  const [teamMembers, setTeamMembers] = useState<{ address: string; role: string }[]>([]);
+  const [newTeamAddress, setNewTeamAddress] = useState('');
+
+  useEffect(() => {
+    setSealWallets(getSealWallets());
+    setTeamMembers(getTeamMembers());
+  }, []);
+
+  const addSealWallet = () => {
+    const w = newWallet.trim();
+    if (!w || sealWallets.includes(w)) return;
+    const updated = [...sealWallets, w];
+    setSealWallets(updated);
+    saveSealWallets(updated);
+    setNewWallet('');
+    setSealSaved(true);
+    setTimeout(() => setSealSaved(false), 2000);
+  };
+
+  const removeSealWallet = (w: string) => {
+    const updated = sealWallets.filter((x) => x !== w);
+    setSealWallets(updated);
+    saveSealWallets(updated);
+  };
+
+  const addTeamMember = () => {
+    const a = newTeamAddress.trim();
+    if (!a) return;
+    const updated = [...teamMembers, { address: a, role: 'viewer' }];
+    setTeamMembers(updated);
+    saveTeamMembers(updated);
+    setNewTeamAddress('');
+  };
+
+  const removeTeamMember = (a: string) => {
+    const updated = teamMembers.filter((m) => m.address !== a);
+    setTeamMembers(updated);
+    saveTeamMembers(updated);
+  };
+
+  const handleClearAll = () => {
+    if (!confirm('This will clear ALL local form and response data. Walrus blobs are permanent and unaffected. Continue?')) return;
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith('walrusform_'))
+      .forEach((k) => localStorage.removeItem(k));
+    router.push('/');
+  };
 
   return (
-    <div className="flex h-screen bg-[#050810] overflow-hidden">
-      {/* Left Nav */}
-      <aside className="w-[260px] glass-card !bg-white/2 !rounded-none border-y-0 border-l-0 p-6 flex flex-col">
-        <div className="mb-12 flex items-center gap-3">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" className="text-[#00E5CC]">
-            <path d="M12 2L3 7V17L12 22L21 17V7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          <h2 className="text-white font-syne font-bold text-sm tracking-tight">Walrus Sessions</h2>
+    <div className="min-h-screen relative text-black bg-[#e6f0ff] overflow-x-hidden">
+      <AppBackground />
+      <Navbar />
+
+      <main className="max-w-[1400px] mx-auto px-8 pt-44 pb-20 relative z-10">
+        <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
+          <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}>
+            <h1 className="text-6xl font-syne font-extrabold text-black mb-4 tracking-tight">Settings</h1>
+            <p className="text-gray-500 font-jakarta font-bold text-sm uppercase tracking-widest">Configure your decentralized experience</p>
+          </motion.div>
         </div>
 
-        <nav className="flex-1 space-y-2">
-          <NavItem icon={<OverviewIcon />} label="Overview" onClick={() => router.push('/dashboard')} />
-          <NavItem icon={<FormsIcon />} label="My Forms" />
-          <NavItem icon={<InboxIcon />} label="Responses" />
-          <NavItem icon={<ChartIcon />} label="Analytics" />
-          <NavItem icon={<SettingsIcon />} label="Settings" active />
-        </nav>
-      </aside>
-
-      {/* Main Area */}
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-20 glass-card !bg-white/5 !rounded-none border-x-0 border-t-0 px-8 flex items-center z-10">
-          <h1 className="text-2xl font-syne font-bold">Settings</h1>
-        </header>
-
-        <div className="flex-1 flex overflow-hidden">
-          {/* Inner Tab Nav */}
-          <aside className="w-[240px] p-8 space-y-2">
-            {TABS.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`w-full text-left px-4 py-2 rounded-lg font-mono text-xs transition-all ${
-                  activeTab === tab ? 'bg-[#00E5CC]/10 text-[#00E5CC] border border-[#00E5CC]/20' : 'text-[#7A8CAB] hover:text-white'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
+        <div className="flex flex-col lg:flex-row gap-10">
+          {/* Tab Navigation */}
+          <aside className="w-full lg:w-[320px] shrink-0">
+            <GlassCard className="!p-4 !rounded-[32px] !bg-white/60">
+              <nav className="flex flex-col gap-2">
+                {TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-4 px-6 py-4 rounded-2xl font-jakarta font-bold text-sm transition-all relative group ${
+                      activeTab === tab.id 
+                        ? 'bg-[#4a2e8c] text-white shadow-lg' 
+                        : 'text-gray-500 hover:bg-white hover:text-black shadow-sm hover:shadow-md'
+                    }`}
+                  >
+                    <span className={`${activeTab === tab.id ? 'text-white' : 'text-gray-400 group-hover:text-[#4a2e8c]'} transition-colors`}>
+                      {tab.icon}
+                    </span>
+                    {tab.id}
+                    {activeTab === tab.id && (
+                      <motion.div 
+                        layoutId="activeTab"
+                        className="absolute right-4 w-1.5 h-1.5 rounded-full bg-white"
+                      />
+                    )}
+                  </button>
+                ))}
+              </nav>
+            </GlassCard>
           </aside>
 
-          {/* Tab Content */}
-          <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
-            <div className="max-w-2xl space-y-12">
-              
-              {activeTab === 'Profile' && (
-                <section className="space-y-6">
-                  <GlassCard className="!p-8">
-                    <h3 className="text-lg font-syne font-bold mb-8">Profile Details</h3>
+          {/* Content Area */}
+          <div className="flex-1 min-w-0">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                {activeTab === 'Profile' && (
+                  <GlassCard className="!p-10 !rounded-[40px] !bg-white/90 border-white shadow-xl">
+                    <div className="flex items-center gap-8 mb-12">
+                      <div className="w-24 h-24 rounded-[32px] bg-gradient-to-tr from-[#cdb4ff] to-[#4a2e8c] flex items-center justify-center text-white text-3xl font-syne font-bold shadow-2xl">
+                        {account ? account.address.slice(2, 4).toUpperCase() : 'WF'}
+                      </div>
+                      <div className="space-y-1">
+                        <h2 className="text-3xl font-syne font-extrabold text-black">Account Profile</h2>
+                        <p className="text-gray-400 font-jakarta font-bold text-xs uppercase tracking-widest">Manage your connected wallet</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-8">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-3">
+                          <label className="text-[11px] font-jakarta font-bold text-gray-400 uppercase tracking-widest ml-1">Wallet Address</label>
+                          <div className="p-5 rounded-2xl bg-gray-50/50 border border-black/5 font-mono text-sm text-gray-600 break-all">
+                            {account?.address ?? 'Not connected'}
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          <label className="text-[11px] font-jakarta font-bold text-gray-400 uppercase tracking-widest ml-1">Current Network</label>
+                          <div className="p-5 rounded-2xl bg-gray-50/50 border border-black/5 font-jakarta font-bold text-sm text-black flex items-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                            Sui Testnet
+                          </div>
+                        </div>
+                      </div>
+
+                      {!account && (
+                        <div className="pt-6">
+                          <ConnectButton className="!rounded-full !bg-[#4a2e8c] !px-10 !py-4" />
+                        </div>
+                      )}
+                    </div>
+                  </GlassCard>
+                )}
+
+                {activeTab === 'Encryption (Seal)' && (
+                  <GlassCard className="!p-10 !rounded-[40px] !bg-white/90 border-white shadow-xl">
+                    <div className="flex justify-between items-start mb-10">
+                      <div className="space-y-1">
+                        <h2 className="text-3xl font-syne font-extrabold text-black">Seal Encryption</h2>
+                        <p className="text-gray-400 font-jakarta font-bold text-xs uppercase tracking-widest">End-to-end privacy policy</p>
+                      </div>
+                      <Badge color="purple">MVP Placeholder</Badge>
+                    </div>
+
+                    <p className="text-sm text-gray-500 font-jakarta font-medium leading-relaxed mb-10 max-w-2xl">
+                      Seal encryption ensures your form responses are only accessible to approved members. 
+                      Add wallet addresses below to grant them future decryption rights.
+                    </p>
+
                     <div className="space-y-6">
-                      <div className="flex items-center gap-6 mb-8">
-                        <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#00E5CC] to-[#0090FF] flex items-center justify-center text-[#050810] text-2xl font-bold">MB</div>
-                        <button className="text-[#00E5CC] font-mono text-xs hover:underline">Change Avatar</button>
+                      <label className="text-[11px] font-jakarta font-bold text-gray-400 uppercase tracking-widest ml-1">Approved Wallets ({sealWallets.length})</label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
+                        {sealWallets.map((w) => (
+                          <div key={w} className="flex items-center justify-between p-4 bg-white border border-black/5 rounded-2xl shadow-sm hover:shadow-md transition-all group">
+                            <span className="font-mono text-xs text-gray-600">{w.slice(0, 12)}…{w.slice(-8)}</span>
+                            <button onClick={() => removeSealWallet(w)} className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all">×</button>
+                          </div>
+                        ))}
+                        {sealWallets.length === 0 && (
+                          <div className="md:col-span-2 p-8 border-2 border-dashed border-gray-100 rounded-[32px] flex flex-col items-center justify-center text-center">
+                            <p className="text-xs font-jakarta font-bold text-gray-400">No wallets added to policy yet</p>
+                          </div>
+                        )}
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-mono text-[#7A8CAB] uppercase">Display Name</label>
-                        <input defaultValue="Muhammad Bagus" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 font-mono text-sm text-white outline-none focus:border-[#00E5CC]/30" />
+
+                      <div className="flex gap-4 p-2 bg-white rounded-[28px] border border-black/5 shadow-inner">
+                        <input
+                          placeholder="Enter wallet address (0x...)"
+                          value={newWallet}
+                          onChange={(e) => setNewWallet(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && addSealWallet()}
+                          className="flex-1 bg-transparent border-none outline-none px-6 font-mono text-sm text-black placeholder:text-gray-300"
+                        />
+                        <Button className="!rounded-full !px-8 !py-3" onClick={addSealWallet}>Add</Button>
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-mono text-[#7A8CAB] uppercase">Wallet Address</label>
-                        <input readOnly value="0x72a...92f1" className="w-full bg-white/2 border border-white/5 rounded-xl px-4 py-2 font-mono text-sm text-[#7A8CAB] outline-none" />
+                      {sealSaved && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-[11px] font-jakarta font-bold text-green-500 mt-2 px-6">Policy updated successfully ✓</motion.p>}
+                    </div>
+                  </GlassCard>
+                )}
+
+                {activeTab === 'Team' && (
+                  <GlassCard className="!p-10 !rounded-[40px] !bg-white/90 border-white shadow-xl">
+                    <div className="mb-10">
+                      <h2 className="text-3xl font-syne font-extrabold text-black">Team Management</h2>
+                      <p className="text-gray-400 font-jakarta font-bold text-xs uppercase tracking-widest mt-1">Collaborate on your sessions</p>
+                    </div>
+
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 gap-3 mb-8">
+                        {teamMembers.map((m) => (
+                          <div key={m.address} className="flex items-center justify-between p-5 bg-white border border-black/5 rounded-[24px] shadow-sm">
+                            <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 rounded-full bg-[#4a2e8c]/5 flex items-center justify-center text-[#4a2e8c]">
+                                <TeamIcon />
+                              </div>
+                              <span className="font-mono text-sm text-gray-700">{m.address.slice(0, 18)}…</span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <Badge color="blue">{m.role}</Badge>
+                              <button onClick={() => removeTeamMember(m.address)} className="text-gray-400 hover:text-red-500 transition-colors px-2 text-xl">×</button>
+                            </div>
+                          </div>
+                        ))}
+                        {teamMembers.length === 0 && (
+                          <div className="p-12 border-2 border-dashed border-gray-100 rounded-[40px] flex flex-col items-center justify-center text-center">
+                            <p className="text-sm font-jakarta font-bold text-gray-400">Your team is currently empty</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex gap-4 p-2 bg-white rounded-[28px] border border-black/5 shadow-inner">
+                        <input
+                          placeholder="Invite by wallet address..."
+                          value={newTeamAddress}
+                          onChange={(e) => setNewTeamAddress(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && addTeamMember()}
+                          className="flex-1 bg-transparent border-none outline-none px-6 font-mono text-sm text-black placeholder:text-gray-300"
+                        />
+                        <Button className="!rounded-full !px-8 !py-3" onClick={addTeamMember}>Invite</Button>
                       </div>
                     </div>
                   </GlassCard>
-                  <Button variant="danger" className="!px-6 !py-2 !text-xs">Disconnect Wallet</Button>
-                </section>
-              )}
+                )}
 
-              {activeTab === 'Encryption (Seal)' && (
-                <section className="space-y-6">
-                  <GlassCard className="!p-8">
-                    <div className="flex justify-between items-start mb-8">
-                      <h3 className="text-lg font-syne font-bold">Active Policy</h3>
-                      <StatusBadge status="Actioned" />
+                {activeTab === 'Danger Zone' && (
+                  <GlassCard className="!p-10 !rounded-[40px] !bg-white/90 border-[#ff4d6a]/20 shadow-xl overflow-hidden relative">
+                    <div className="absolute top-0 right-0 p-8 opacity-5 text-[#ff4d6a]">
+                      <TrashIcon />
                     </div>
-                    <div className="space-y-6">
-                      <div className="p-4 bg-white/2 border border-white/5 rounded-xl font-mono text-[10px] text-[#7A8CAB] break-all">
-                        Policy ID: 0x92b8c2d1e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z
+                    <div className="mb-10">
+                      <h2 className="text-3xl font-syne font-extrabold text-[#ff4d6a]">Danger Zone</h2>
+                      <p className="text-[#ff4d6a]/40 font-jakarta font-bold text-xs uppercase tracking-widest mt-1">Irreversible actions</p>
+                    </div>
+
+                    <div className="p-8 bg-red-50/50 rounded-[32px] border border-red-100 flex flex-col md:flex-row justify-between items-center gap-8 text-center md:text-left">
+                      <div>
+                        <h4 className="font-syne font-bold text-lg text-black mb-2">Clear Local Registry</h4>
+                        <p className="text-sm text-gray-500 font-jakarta font-medium max-w-md">
+                          This will clear all local indexing data for your forms and responses. 
+                          Walrus blobs are permanent and will not be deleted, but they will vanish from your local dashboard.
+                        </p>
                       </div>
-                      <div className="space-y-4">
-                        <label className="text-[10px] font-mono text-[#7A8CAB] uppercase">Approved Wallets</label>
-                        <div className="flex flex-wrap gap-2">
-                          <span className="px-3 py-1 bg-[#00E5CC]/10 border border-[#00E5CC]/20 rounded-full font-mono text-[10px] text-[#00E5CC] flex items-center gap-2">
-                            0x72a...92f1 <button className="hover:text-white">×</button>
-                          </span>
-                          <span className="px-3 py-1 bg-white/5 border border-white/10 rounded-full font-mono text-[10px] text-[#7A8CAB] flex items-center gap-2">
-                            0x123...abcd <button className="hover:text-white">×</button>
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <input placeholder="Add wallet address..." className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 font-mono text-xs text-white outline-none focus:border-[#00E5CC]/30" />
-                        <Button className="!px-4 !py-2 !text-xs">Add +</Button>
-                      </div>
+                      <Button variant="danger" className="!rounded-full !px-12 !py-4 shadow-lg shadow-red-500/20" onClick={handleClearAll}>
+                        Clear Data
+                      </Button>
                     </div>
                   </GlassCard>
-                  <div className="p-6 bg-[#7B61FF]/5 border border-[#7B61FF]/20 rounded-2xl flex gap-4">
-                    <div className="text-[#7B61FF]"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
-                    <p className="text-[11px] text-[#7A8CAB] font-mono leading-relaxed">Seal encryption ensures your form responses are only accessible to approved team members. Data is encrypted before storage.</p>
-                  </div>
-                </section>
-              )}
+                )}
 
-              {activeTab === 'Danger Zone' && (
-                <section className="space-y-6">
-                  <div className="glass-card !bg-[#FF4D6A]/5 border-[#FF4D6A]/20 p-8 space-y-6">
-                    <h3 className="text-lg font-syne font-bold text-[#FF4D6A]">Danger Zone</h3>
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <div className="font-syne font-bold text-sm">Delete All Responses</div>
-                          <div className="text-xs text-[#7A8CAB] font-mono">This action cannot be undone.</div>
-                        </div>
-                        <Button variant="danger" className="!py-2 !text-xs">Delete</Button>
-                      </div>
-                      <div className="flex justify-between items-center pt-4 border-t border-[#FF4D6A]/10">
-                        <div>
-                          <div className="font-syne font-bold text-sm">Delete This Form</div>
-                          <div className="text-xs text-[#7A8CAB] font-mono">Remove this form and all associated metadata.</div>
-                        </div>
-                        <Button variant="danger" className="!py-2 !text-xs">Delete Form</Button>
-                      </div>
+                {(activeTab === 'Notifications' || activeTab === 'Export & Data') && (
+                  <GlassCard className="!p-12 !rounded-[40px] !bg-white/90 flex flex-col items-center justify-center text-center min-h-[400px]">
+                    <div className="w-20 h-20 rounded-full bg-gray-50 flex items-center justify-center mb-6 text-gray-300">
+                      <ProfileIcon />
                     </div>
-                  </div>
-                </section>
-              )}
-
-            </div>
+                    <h3 className="text-2xl font-syne font-extrabold text-black mb-2">Coming Soon</h3>
+                    <p className="text-gray-400 font-jakarta font-bold text-xs uppercase tracking-widest">Planned for Version 2.0</p>
+                  </GlassCard>
+                )}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
       </main>
@@ -146,34 +329,3 @@ export default function SettingsPage() {
   );
 }
 
-function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode, label: string, active?: boolean, onClick?: () => void }) {
-  return (
-    <button 
-      onClick={onClick}
-      className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all relative group ${
-        active ? 'bg-[#00E5CC]/5 text-white' : 'text-[#7A8CAB] hover:text-white hover:bg-white/[0.02]'
-      }`}
-    >
-      {active && <div className="absolute left-0 top-1/4 bottom-1/4 w-[2px] bg-[#00E5CC] rounded-full"></div>}
-      <div className={`${active ? 'text-[#00E5CC]' : 'group-hover:text-white'} transition-colors`}>
-        {icon}
-      </div>
-      <span className="font-mono text-sm font-medium">{label}</span>
-    </button>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span className="px-2 py-0.5 bg-[#00E5CC]/10 text-[#00E5CC] border border-[#00E5CC]/20 rounded-full font-mono text-[9px] uppercase tracking-wider">
-      {status}
-    </span>
-  );
-}
-
-// Icons
-const OverviewIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>;
-const FormsIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>;
-const InboxIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/><path d="M4 13h4.1a2 2 0 011.8 1.1L12 17l2.1-2.9a2 2 0 011.8-1.1H20"/></svg>;
-const ChartIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18M18 17v-4M13 17v-7M8 17v-4"/></svg>;
-const SettingsIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>;
