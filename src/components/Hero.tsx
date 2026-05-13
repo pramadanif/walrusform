@@ -42,7 +42,7 @@ const Hero = () => {
             }}
           >
             <Image 
-              src="/alkimi-hero.avif" 
+              src="/Gemini_Generated_Image_ucjfxbucjfxbucjfs.png" 
               alt="Hero Background" 
               fill
               className="object-contain object-bottom opacity-100"
