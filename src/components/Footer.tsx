@@ -95,17 +95,17 @@ const Footer = () => {
             </a>
           </div>
           <div className="text-[12px] text-white/50 mt-auto pt-24 text-right">
-            © 2024 Copyright Walrus Foundation. All rights reserved.
+            © 2024 Copyright Worm Foundation. All rights reserved.
           </div>
         </div>
       </div>
 
       {/* Large bottom text and image container */}
       <div className="relative w-full flex-grow flex justify-center items-end mt-10">
-        {/* Giant WALRUS text */}
+        {/* Giant WORM text */}
         <div className="absolute inset-x-0 bottom-0 text-center select-none overflow-hidden flex justify-center leading-none pointer-events-none">
           <h1 className="text-[32vw] font-bold text-[#f4f4f4] tracking-[-0.04em] leading-[0.7] -mb-4">
-            walrus
+            worm
           </h1>
         </div>
         

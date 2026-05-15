@@ -21,7 +21,7 @@ const Hero = () => {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  const headingWords = "Walrus Form".split(" ");
+  const headingWords = "Worm".split(" ");
 
   return (
     <main className="relative min-h-[100vh] w-full flex flex-col items-center justify-center pt-24 overflow-hidden">
@@ -46,7 +46,7 @@ const Hero = () => {
             }}
           >
             <Image 
-              src="/Gemini_Generated_Image_ucjfxbucjfxbucjfs.png" 
+              src="/hero.png" 
               alt="Hero Background" 
               fill
               className="object-contain object-bottom opacity-100 scale-105"

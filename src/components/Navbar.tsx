@@ -4,6 +4,7 @@ import React from 'react';
 import { ConnectButton, useCurrentAccount } from '@mysten/dapp-kit';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
 
 const Navbar = () => {
@@ -25,15 +26,18 @@ const Navbar = () => {
     >
       <div className="glass-card !py-4 !px-8 !rounded-full flex justify-between items-center shadow-2xl border-white/40 bg-white/70 backdrop-blur-xl">
         <div 
-          className="font-syne font-extrabold text-[24px] tracking-tight flex items-center gap-2 cursor-pointer group"
+          className="font-syne font-extrabold text-[24px] tracking-tight flex items-center gap-3 cursor-pointer group"
           onClick={() => router.push('/')}
         >
-          <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center group-hover:rotate-12 transition-transform">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-white">
-              <path d="M12 2L3 7V17L12 22L21 17V7L12 2Z" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+          <div className="relative w-10 h-10 group-hover:scale-110 transition-transform">
+            <Image 
+              src="/wormlogo.png" 
+              alt="worm logo" 
+              fill 
+              className="object-contain"
+            />
           </div>
-          <span className="hidden sm:block">walrusform</span>
+          <span className="hidden sm:block">worm</span>
         </div>
         
         <div className="hidden md:flex gap-8 text-[14px] font-jakarta font-bold">

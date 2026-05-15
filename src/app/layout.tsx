@@ -25,7 +25,7 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Walrus Form | Decentralized Feedback",
+  title: "Worm | Decentralized Feedback",
   description: "Secure, decentralized form builder built on the Walrus Protocol.",
 };
 

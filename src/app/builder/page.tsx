@@ -228,8 +228,8 @@ export default function BuilderPage() {
                     exit={{ opacity: 0, scale: 0.95 }}
                     className="h-[500px] border-4 border-dashed border-[#cdb4ff]/30 rounded-[60px] flex flex-col items-center justify-center text-center p-16 bg-white/20 backdrop-blur-sm group hover:bg-white/30 transition-colors"
                   >
-                    <div className="relative w-40 h-40 mb-10 animate-float">
-                      <Image src="/alkimi-hero.avif" alt="Mascot" fill className="object-contain" />
+                    <div className="relative w-48 h-48 mb-10 animate-float">
+                      <Image src="/form.png" alt="Mascot" fill className="object-contain" />
                     </div>
                     <h3 className="text-3xl font-outfit font-extrabold mb-4 text-[#4a2e8c] tracking-tight">Empty Canvas</h3>
                     <p className="font-jakarta font-bold text-gray-400 max-w-xs leading-relaxed">Your decentralized session starts here. Pick a component to begin building.</p>
