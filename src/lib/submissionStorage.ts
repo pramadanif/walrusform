@@ -1,4 +1,5 @@
 import { uploadToWalrus, readFromWalrus } from './walrus';
+import { appendToSubmissionIndex, loadSubmissionIndex } from './walrusRegistry';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,11 +22,7 @@ export interface AdminMeta {
   status?: 'New' | 'In Review' | 'Actioned' | 'Archived';
 }
 
-// ─── localStorage helpers ─────────────────────────────────────────────────────
-
-function subKey(formBlobId: string) {
-  return `walrusform_subs_${formBlobId}`;
-}
+// ─── Admin metadata (localStorage — immutable blob can't be updated) ──────────
 
 function adminKey(submissionBlobId: string) {
   return `walrusform_admin_${submissionBlobId}`;
@@ -48,17 +45,38 @@ export function saveAdminMeta(submissionBlobId: string, meta: AdminMeta): void {
 
 // ─── Core API ────────────────────────────────────────────────────────────────
 
+export type UploadStage = 'preparing' | 'uploading' | 'indexing' | 'finalized';
+
 /**
  * Upload a form submission (and any media files) to Walrus.
- * Blob IDs are indexed in localStorage so the dashboard can retrieve them later.
+ * Blob IDs are indexed in both a Walrus append-only index blob AND localStorage.
+ *
+ * @param onStageChange - optional callback for honest upload progress reporting
  */
 export async function submitForm(
   formBlobId: string,
   answers: Record<string, unknown>,
-  mediaBlobIds?: Record<string, string>,
+  mediaFiles?: Record<string, File>,
   submitterWallet?: string,
-  options?: { encrypted?: boolean }
+  options?: { encrypted?: boolean },
+  onStageChange?: (stage: UploadStage) => void
 ): Promise<{ submissionBlobId: string }> {
+
+  onStageChange?.('preparing');
+
+  // Upload any media files first
+  const mediaBlobIds: Record<string, string> = {};
+  if (mediaFiles && Object.keys(mediaFiles).length > 0) {
+    for (const [fieldId, file] of Object.entries(mediaFiles)) {
+      const buf = await file.arrayBuffer();
+      const { blobId: mediaBlobId } = await uploadToWalrus(buf, {
+        contentType: file.type || 'application/octet-stream',
+        epochs: 10,
+      });
+      mediaBlobIds[fieldId] = mediaBlobId;
+    }
+  }
+
   // Build submission object
   const submission: FormSubmission = {
     submissionId: crypto.randomUUID(),
@@ -66,9 +84,11 @@ export async function submitForm(
     submittedAt: new Date().toISOString(),
     submitterWallet,
     answers,
-    mediaBlobIds: mediaBlobIds && Object.keys(mediaBlobIds).length > 0 ? mediaBlobIds : undefined,
+    mediaBlobIds: Object.keys(mediaBlobIds).length > 0 ? mediaBlobIds : undefined,
     encrypted: options?.encrypted ?? false,
   };
+
+  onStageChange?.('uploading');
 
   // Upload submission JSON to Walrus
   const { blobId } = await uploadToWalrus(JSON.stringify(submission), {
@@ -76,13 +96,23 @@ export async function submitForm(
     epochs: 10,
   });
 
-  // Index submission blobId in localStorage
-  const key = subKey(formBlobId);
-  const existing: { blobId: string; submittedAt: string }[] = JSON.parse(
-    localStorage.getItem(key) ?? '[]'
-  );
-  existing.unshift({ blobId, submittedAt: submission.submittedAt });
-  localStorage.setItem(key, JSON.stringify(existing));
+  onStageChange?.('indexing');
+
+  const indexEntry = { blobId, submittedAt: submission.submittedAt };
+
+  // 1. Append to Walrus submission index blob (decentralized)
+  try {
+    await appendToSubmissionIndex(formBlobId, indexEntry);
+  } catch (e) {
+    console.warn('[SubmissionStorage] Walrus index update failed, localStorage-only fallback active.', e);
+    // Fallback: update legacy localStorage index directly
+    const legacyKey = `walrusform_subs_${formBlobId}`;
+    const existing = JSON.parse(localStorage.getItem(legacyKey) ?? '[]');
+    existing.unshift(indexEntry);
+    localStorage.setItem(legacyKey, JSON.stringify(existing));
+  }
+
+  onStageChange?.('finalized');
 
   return { submissionBlobId: blobId };
 }
@@ -90,12 +120,13 @@ export async function submitForm(
 /**
  * Load all submissions for a given form from Walrus,
  * merging with any admin metadata stored in localStorage.
+ * Uses Walrus index blob with localStorage fallback.
  */
 export async function getSubmissionsForForm(
   formBlobId: string
 ): Promise<(FormSubmission & AdminMeta)[]> {
-  const key = subKey(formBlobId);
-  const index: { blobId: string }[] = JSON.parse(localStorage.getItem(key) ?? '[]');
+  // Use Walrus index blob with localStorage fallback
+  const index = await loadSubmissionIndex(formBlobId);
 
   const submissions = await Promise.allSettled(
     index.map(async ({ blobId }) => {

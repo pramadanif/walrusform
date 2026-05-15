@@ -1,4 +1,5 @@
 import { uploadToWalrus, readFromWalrus } from './walrus';
+import { appendToWalrusRegistry, getMergedRegistry } from './walrusRegistry';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,7 +33,7 @@ export interface FormDefinition {
   settings: {
     requireWallet: boolean;
     encryptWithSeal: boolean;
-    allowedDecryptors?: string[]; // wallet addresses for Seal policy
+    allowedDecryptors?: string[]; // wallet addresses for Seal/AES-GCM policy
   };
 }
 
@@ -42,14 +43,14 @@ export interface FormRegistryEntry {
   blobId: string;
 }
 
-// ─── Registry (localStorage index) ────────────────────────────────────────────
+// ─── Legacy localStorage registry (backward compat pointer) ──────────────────
 
-const REGISTRY_KEY = 'walrusform_registry';
+const LOCAL_REGISTRY_KEY = 'walrusform_registry';
 
 export function getLocalFormRegistry(): Record<string, FormRegistryEntry> {
   if (typeof window === 'undefined') return {};
   try {
-    return JSON.parse(localStorage.getItem(REGISTRY_KEY) ?? '{}');
+    return JSON.parse(localStorage.getItem(LOCAL_REGISTRY_KEY) ?? '{}');
   } catch {
     return {};
   }
@@ -57,7 +58,20 @@ export function getLocalFormRegistry(): Record<string, FormRegistryEntry> {
 
 function saveLocalFormRegistry(registry: Record<string, FormRegistryEntry>) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(REGISTRY_KEY, JSON.stringify(registry));
+  localStorage.setItem(LOCAL_REGISTRY_KEY, JSON.stringify(registry));
+}
+
+/**
+ * Get the full merged registry (Walrus blobs + localStorage legacy entries).
+ * Prefers Walrus entries on conflict.
+ */
+export async function getFormRegistry(): Promise<Record<string, FormRegistryEntry>> {
+  try {
+    return await getMergedRegistry();
+  } catch {
+    // Fallback to local-only if Walrus is unreachable
+    return getLocalFormRegistry();
+  }
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────
@@ -65,17 +79,35 @@ function saveLocalFormRegistry(registry: Record<string, FormRegistryEntry>) {
 /**
  * Upload a FormDefinition JSON to Walrus.
  * Returns the blobId — this IS the form's shareable ID.
+ * Also registers the form in both the Walrus registry blob and the local registry.
  */
-export async function saveFormDefinition(form: FormDefinition): Promise<string> {
+export async function saveFormDefinition(
+  form: FormDefinition,
+  walletAddress?: string
+): Promise<string> {
   const { blobId } = await uploadToWalrus(JSON.stringify(form), {
     contentType: 'application/json',
     epochs: 10,
   });
 
-  // Store in local registry for dashboard listing
-  const registry = getLocalFormRegistry();
-  registry[blobId] = { title: form.title, createdAt: form.createdAt, blobId };
-  saveLocalFormRegistry(registry);
+  const entry = {
+    blobId,
+    title: form.title,
+    createdAt: form.createdAt,
+    creatorWallet: walletAddress ?? form.creatorWallet,
+  };
+
+  // 1. Upload to Walrus append-only registry (decentralized)
+  try {
+    await appendToWalrusRegistry(entry);
+  } catch (e) {
+    console.warn('[FormStorage] Failed to update Walrus registry, falling back to localStorage only.', e);
+  }
+
+  // 2. Always update localStorage as fallback pointer
+  const local = getLocalFormRegistry();
+  local[blobId] = { title: form.title, createdAt: form.createdAt, blobId };
+  saveLocalFormRegistry(local);
 
   return blobId;
 }

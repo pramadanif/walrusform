@@ -1,8 +1,8 @@
 # Worm — Implementation Progress
 
-> **Last updated:** 2026-05-15T21:18 WIB (UTC+7)
+> **Last updated:** 2026-05-15T21:35 WIB (UTC+7)
 > **Dev server:** running on http://localhost:3000 (Next.js 16.2.4 / Turbopack)
-> **Status: Strategic Enhancement Plan created; Landing page enhanced with 3D reveal**
+> **Status: Moving to Phase 1-3 (decentralization + security + positioning); Seal SDK migration in progress**
 > **Roadmap:** Refer to [enhancement_plan.md](file:///Users/muhammadbaguspramadani/Documents/myproject/walrusform/enhancement_plan.md) for next steps.
 
 ---
@@ -33,7 +33,7 @@ papaparse @types/papaparse uuid @types/uuid
 | `walrus.ts` | ✅ Done | `uploadToWalrus`, `readFromWalrus`, `getExplorerUrl` — uses `/v1/blobs/` Walrus testnet endpoints |
 | `formStorage.ts` | ✅ Done | `saveFormDefinition`, `loadFormDefinition`, `getLocalFormRegistry` — localStorage registry |
 | `submissionStorage.ts` | ✅ Done | `submitForm`, `getSubmissionsForForm`, `saveAdminMeta`, `getAdminMeta` |
-| `seal.ts` | ✅ Done | Client-side AES-GCM encryption, deterministic key from allowed decryptors |
+| `seal.ts` | ✅ Done | Client-side AES-GCM encryption, deterministic key from allowed decryptors (to be replaced by Seal SDK) |
 | `csvExport.ts` | ✅ Done | `exportSubmissionsToCSV` using PapaParse |
 
 ### Component Files Created (`src/components/`)
@@ -62,7 +62,7 @@ papaparse @types/papaparse uuid @types/uuid
 
 1. **Walrus upload endpoint** — Using `/v1/blobs?epochs=` PUT endpoint. If Walrus testnet changes API, update `src/lib/walrus.ts` → `uploadToWalrus`.
 
-2. **Seal SDK parity** — `lib/seal.ts` now encrypts with WebCrypto AES-GCM. Replace with `@mysten/seal` SDK if full Seal policy enforcement is required.
+2. **Seal SDK parity** — `lib/seal.ts` still uses WebCrypto AES-GCM. Must migrate to `@mysten/seal` SDK for real policy enforcement.
 
 3. **WalletGuard** — The agent prompt asked for a `WalletGuard` component to redirect unauthenticated users from `/dashboard`. This was **NOT implemented** to avoid breaking the existing UI flow (dashboard works without wallet connection for form reviewing). Add it if needed.
 
@@ -77,6 +77,22 @@ papaparse @types/papaparse uuid @types/uuid
 ---
 
 ## 🔜 Remaining Work (Not Yet Done)
+
+### Phase 1: Core Decentralization & Discovery
+- [ ] **Walrus Index Blobs** — replace `localStorage` registry with on-chain index blobs
+- [ ] **Append-only Submission Index** — update per-form submission index blob on each submit
+- [ ] **Admin Metadata as Blobs** — store notes/status/priority as linked Walrus blobs
+- [ ] **Walrus Retry Wrapper** — exponential backoff for publisher/aggregator calls
+
+### Phase 2: Security, Integrity & Anti-Abuse
+- [ ] **Seal SDK Migration** — replace WebCrypto placeholder with `@mysten/seal` SDK
+- [ ] **DOMPurify** — sanitize all rich text render paths
+- [ ] **Abuse Controls** — MIME/size validation + submission cooldown
+- [ ] **Honest Upload States** — Preparing → Uploading → Indexing → Finalized
+
+### Phase 3: Positioning & Polish
+- [ ] **Brand Copy Update** — shift to “Verifiable, Immutable, Decentralized Feedback Infrastructure”
+- [ ] **Design Audit** — confirm no visual drift
 
 - [ ] **WalletGuard** for dashboard (redirect to `/` if no wallet connected) — see `WALRUSFORM_AGENT_PROMPT.md` §Wallet Integration
 - [ ] **README.md** update with real blob IDs after first test deployment

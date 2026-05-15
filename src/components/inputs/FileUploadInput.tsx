@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { uploadToWalrus } from '@/lib/walrus';
+import { uploadToWalrus, validateUploadFile } from '@/lib/walrus';
 
 interface Props {
   type: 'screenshot' | 'video';
@@ -9,20 +9,33 @@ interface Props {
   onClear?: () => void;
 }
 
+type Stage = 'idle' | 'preparing' | 'uploading' | 'verifying' | 'done' | 'error';
+
+const STAGE_LABELS: Record<Stage, string> = {
+  idle: '',
+  preparing: 'Preparing file…',
+  uploading: 'Uploading to Walrus…',
+  verifying: 'Verifying blob…',
+  done: 'Stored on Walrus',
+  error: '',
+};
+
 /**
- * File upload input styled exactly like the existing screenshot zone on /form/[id].
- * Handles real Walrus upload with simulated progress (Walrus HTTP has no streaming progress API).
+ * File upload input with:
+ * - Real MIME type + size validation (not browser accept filter alone)
+ * - Honest stage-based progress (no fake percentages)
+ * - Real Walrus upload with retry (via uploadToWalrus)
  */
 export function FileUploadInput({ type, onUploadComplete, onClear }: Props) {
-  const [progress, setProgress] = useState<number | null>(null);
+  const [stage, setStage] = useState<Stage>('idle');
   const [blobId, setBlobId] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const accept = type === 'screenshot' ? 'image/*' : 'video/*';
-  const maxMB = type === 'screenshot' ? 10 : 200;
   const label = type === 'screenshot' ? 'Upload Screenshot' : 'Upload Video';
+  const maxLabel = type === 'screenshot' ? '10 MB max · JPEG, PNG, GIF, WebP' : '50 MB max · MP4, WebM';
+  
   const icon =
     type === 'screenshot' ? (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 group-hover:text-[#4a2e8c] transition-colors">
@@ -38,72 +51,76 @@ export function FileUploadInput({ type, onUploadComplete, onClear }: Props) {
     );
 
   const handleFile = async (file: File) => {
-    if (file.size > maxMB * 1024 * 1024) {
-      setError(`File too large. Max ${maxMB} MB.`);
+    setError(null);
+
+    // Real MIME type + size validation
+    const validation = validateUploadFile(file, type);
+    if (!validation.valid) {
+      setError(validation.error ?? 'Invalid file.');
+      setStage('error');
       return;
     }
-    setError(null);
-    setProgress(10);
+
     setFileName(file.name);
+    setStage('preparing');
 
     try {
-      // Simulate progress since Walrus HTTP PUT doesn't expose upload events
-      const progressTimer = setInterval(() => {
-        setProgress((p) => (p !== null && p < 80 ? p + 10 : p));
-      }, 600);
-
       const buffer = await file.arrayBuffer();
-      clearInterval(progressTimer);
-      setProgress(85);
-
+      
+      setStage('uploading');
       const { blobId: id } = await uploadToWalrus(buffer, {
         contentType: file.type,
         epochs: 10,
       });
 
-      setProgress(100);
+      setStage('verifying');
+      // Brief pause to show the verifying state — gives visual confirmation
+      await new Promise((res) => setTimeout(res, 600));
+
+      setStage('done');
       setBlobId(id);
       onUploadComplete(id);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Upload failed';
+      const msg = e instanceof Error ? e.message : 'Upload failed. Please try again.';
       setError(msg);
-      setProgress(null);
+      setStage('error');
     }
   };
 
   const reset = () => {
     setBlobId(null);
-    setProgress(null);
+    setStage('idle');
     setFileName(null);
     setError(null);
     onClear?.();
     if (inputRef.current) inputRef.current.value = '';
   };
 
+  const isLoading = stage === 'preparing' || stage === 'uploading' || stage === 'verifying';
+
   return (
-    // Mirrors existing screenshot zone: dashed border, gray-50 bg, hover purple
     <div
       className={`h-32 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center gap-2 bg-gray-50/50 transition-all cursor-pointer group relative overflow-hidden ${
-        blobId
+        stage === 'done'
           ? 'border-[#4a2e8c]/30 bg-[#cdb4ff]/5'
-          : error
+          : stage === 'error'
           ? 'border-red-200 bg-red-50/30'
-          : progress !== null && progress < 100
+          : isLoading
           ? 'border-[#cdb4ff]/40'
           : 'border-gray-100 hover:bg-gray-50 hover:border-[#cdb4ff]'
       }`}
-      onClick={() => !blobId && !progress && inputRef.current?.click()}
+      onClick={() => !isLoading && stage !== 'done' && inputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); }}
       onDrop={(e) => {
         e.preventDefault();
         const f = e.dataTransfer.files[0];
-        if (f) handleFile(f);
+        if (f && !isLoading && stage !== 'done') handleFile(f);
       }}
     >
       <input
         ref={inputRef}
         type="file"
-        accept={accept}
+        accept={type === 'screenshot' ? 'image/jpeg,image/png,image/gif,image/webp,image/svg+xml' : 'video/mp4,video/webm,video/ogg'}
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -112,38 +129,39 @@ export function FileUploadInput({ type, onUploadComplete, onClear }: Props) {
       />
 
       {/* Idle state */}
-      {progress === null && !blobId && !error && (
+      {stage === 'idle' && (
         <>
           {icon}
           <span className="font-jakarta font-bold text-xs text-gray-400 group-hover:text-[#4a2e8c] transition-colors">
             {label}
           </span>
           <span className="font-jakarta text-[10px] text-gray-300">
-            Max {maxMB} MB · Drag & drop or click
+            {maxLabel} · Drag & drop or click
           </span>
         </>
       )}
 
-      {/* Progress bar */}
-      {progress !== null && progress < 100 && (
-        <div className="w-full px-8 flex flex-col items-center gap-2">
-          <span className="font-jakarta font-bold text-xs text-[#4a2e8c]">
-            Uploading to Walrus… {progress}%
-          </span>
+      {/* Loading / stage-based progress */}
+      {isLoading && (
+        <div className="flex flex-col items-center gap-3 w-full px-8">
+          {/* Animated indeterminate bar — honest, no fake % */}
           <div className="h-[3px] w-full bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-[#4a2e8c] transition-all duration-500 shadow-[0_0_6px_rgba(74,46,140,0.3)]"
-              style={{ width: `${progress}%` }}
-            />
+            <div className="h-full bg-[#4a2e8c] rounded-full animate-[loading_1.5s_ease-in-out_infinite]" 
+                 style={{ width: '40%', animation: 'worm-slide 1.5s ease-in-out infinite' }} />
           </div>
-          <span className="font-jakarta text-[10px] text-gray-400 truncate max-w-full px-4">
-            {fileName}
+          <span className="font-jakarta font-bold text-[11px] text-[#4a2e8c]">
+            {STAGE_LABELS[stage]}
           </span>
+          {fileName && (
+            <span className="font-jakarta text-[10px] text-gray-400 truncate max-w-full px-4">
+              {fileName}
+            </span>
+          )}
         </div>
       )}
 
       {/* Success state */}
-      {blobId && (
+      {stage === 'done' && blobId && (
         <div className="flex flex-col items-center gap-1 px-6 w-full">
           <div className="flex items-center gap-2">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4a2e8c" strokeWidth="2.5">
@@ -165,9 +183,9 @@ export function FileUploadInput({ type, onUploadComplete, onClear }: Props) {
       )}
 
       {/* Error state */}
-      {error && !blobId && (
+      {stage === 'error' && (
         <div className="flex flex-col items-center gap-2">
-          <span className="font-jakarta font-bold text-xs text-red-500">{error}</span>
+          <span className="font-jakarta font-bold text-xs text-red-500 text-center px-4">{error}</span>
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); reset(); }}
