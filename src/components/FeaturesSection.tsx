@@ -100,8 +100,8 @@ const FeaturesSection = () => {
             transition={{ delay: 1, duration: 1 }}
             className="text-xl text-black/50 font-jakarta font-medium max-w-2xl leading-relaxed"
           >
-            Leveraging the full power of the Walrus Protocol to bring transparency, 
-            security, and permanence to community engagement.
+            Verifiable, immutable, and decentralized feedback infrastructure built on the Walrus Protocol. 
+            Securely collect high-integrity sessions directly from your community.
           </motion.p>
         </div>
 

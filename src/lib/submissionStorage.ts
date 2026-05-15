@@ -56,26 +56,13 @@ export type UploadStage = 'preparing' | 'uploading' | 'indexing' | 'finalized';
 export async function submitForm(
   formBlobId: string,
   answers: Record<string, unknown>,
-  mediaFiles?: Record<string, File>,
+  mediaBlobIds?: Record<string, string>,
   submitterWallet?: string,
   options?: { encrypted?: boolean },
   onStageChange?: (stage: UploadStage) => void
 ): Promise<{ submissionBlobId: string }> {
 
   onStageChange?.('preparing');
-
-  // Upload any media files first
-  const mediaBlobIds: Record<string, string> = {};
-  if (mediaFiles && Object.keys(mediaFiles).length > 0) {
-    for (const [fieldId, file] of Object.entries(mediaFiles)) {
-      const buf = await file.arrayBuffer();
-      const { blobId: mediaBlobId } = await uploadToWalrus(buf, {
-        contentType: file.type || 'application/octet-stream',
-        epochs: 10,
-      });
-      mediaBlobIds[fieldId] = mediaBlobId;
-    }
-  }
 
   // Build submission object
   const submission: FormSubmission = {
@@ -84,7 +71,7 @@ export async function submitForm(
     submittedAt: new Date().toISOString(),
     submitterWallet,
     answers,
-    mediaBlobIds: Object.keys(mediaBlobIds).length > 0 ? mediaBlobIds : undefined,
+    mediaBlobIds: mediaBlobIds && Object.keys(mediaBlobIds).length > 0 ? mediaBlobIds : undefined,
     encrypted: options?.encrypted ?? false,
   };
 

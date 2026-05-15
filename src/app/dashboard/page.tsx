@@ -8,12 +8,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import AppBackground from '@/components/AppBackground';
 import Image from 'next/image';
 import Navbar from '@/components/Navbar';
-import { getLocalFormRegistry, loadFormDefinition, FormDefinition } from '@/lib/formStorage';
+import { getFormRegistry, loadFormDefinition, FormDefinition } from '@/lib/formStorage';
 import { getSubmissionsForForm, saveAdminMeta, AdminMeta, FormSubmission } from '@/lib/submissionStorage';
 import { exportSubmissionsToCSV } from '@/lib/csvExport';
 import { getExplorerUrl } from '@/lib/walrus';
 import { decryptWithSeal } from '@/lib/seal';
 import { useCurrentAccount } from '@mysten/dapp-kit';
+import DOMPurify from 'dompurify';
 
 type Submission = FormSubmission & AdminMeta & { _blobId?: string; _formTitle?: string; _decrypted?: boolean; _sealError?: string };
 
@@ -40,7 +41,7 @@ export default function DashboardPage() {
     const loadAll = async () => {
       setLoadingResponses(true);
       try {
-        const registry = getLocalFormRegistry();
+        const registry = await getFormRegistry();
         const formIds = Object.keys(registry);
 
         if (formIds.length === 0) {
@@ -212,8 +213,8 @@ export default function DashboardPage() {
                   onChange={(e) => setSelectedFormId(e.target.value as string)}
                 >
                   <option value="all">All Sessions</option>
-                  {Object.entries(getLocalFormRegistry()).map(([id, entry]) => (
-                    <option key={id} value={id}>{entry.title}</option>
+                  {forms.map((form) => (
+                    <option key={form._blobId} value={form._blobId}>{form.title}</option>
                   ))}
                 </select>
               </div>
@@ -422,8 +423,10 @@ export default function DashboardPage() {
                       {Object.entries(selectedResponse.answers ?? {}).map(([k, v]) => (
                         <div key={k} className="p-6 rounded-[32px] bg-gray-50/50 border border-black/5">
                           <div className="text-[10px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-2">{k}</div>
-                          <div className="font-jakarta font-bold text-[15px] text-gray-800 break-words whitespace-pre-wrap">
-                            {typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v ?? '—')}
+                          <div className="font-jakarta font-bold text-[15px] text-gray-800 break-words whitespace-pre-wrap"
+                               dangerouslySetInnerHTML={typeof v === 'string' && v.startsWith('<') ? { __html: DOMPurify.sanitize(v) } : undefined}
+                          >
+                            {!(typeof v === 'string' && v.startsWith('<')) ? (typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v ?? '—')) : undefined}
                           </div>
                         </div>
                       ))}

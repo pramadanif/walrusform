@@ -91,7 +91,7 @@ export async function encryptWithSeal(
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encoder = new TextEncoder();
   const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: iv as BufferSource },
     key,
     encoder.encode(data)
   );
@@ -127,7 +127,11 @@ export async function decryptWithSeal(
   const data = fromBase64(dataB64);
   const key = await deriveKey(allowedDecryptors);
 
-  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: iv as BufferSource },
+    key,
+    data as BufferSource
+  );
   return new TextDecoder().decode(decrypted);
 }
 

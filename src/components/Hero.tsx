@@ -101,7 +101,7 @@ const Hero = () => {
           transition={{ delay: 0.4 }}
           className="text-[20px] md:text-[24px] text-black/60 font-jakarta font-medium tracking-tight max-w-[850px] leading-relaxed mb-12"
         >
-          A fully decentralized, Network-native feedback and form platform built on the Walrus Protocol. Securely collect structured feedback directly from your community.
+          Worm provides the high-fidelity primitives needed for permanent, transparent, and secure community coordination on the Walrus Protocol.
         </motion.p>
 
         <motion.div 

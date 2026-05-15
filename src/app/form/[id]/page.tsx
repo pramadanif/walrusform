@@ -61,11 +61,14 @@ export default function PublicFormPage({ params }: PageProps) {
     });
   };
 
+  const [submitStage, setSubmitStage] = useState<string>('');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formDef) return;
     setSubmitting(true);
     setSubmitError(null);
+    setSubmitStage('preparing');
     try {
       let answersToSubmit = answers;
       let mediaToSubmit: Record<string, string> | undefined = mediaBlobIds;
@@ -90,7 +93,8 @@ export default function PublicFormPage({ params }: PageProps) {
         answersToSubmit,
         mediaToSubmit,
         account?.address,
-        { encrypted }
+        { encrypted },
+        (stage) => setSubmitStage(stage)
       );
       setSubmittedBlobId(submissionBlobId);
     } catch (err: unknown) {
@@ -98,6 +102,7 @@ export default function PublicFormPage({ params }: PageProps) {
       setSubmitError(msg);
     } finally {
       setSubmitting(false);
+      setSubmitStage('');
     }
   };
 
@@ -324,7 +329,9 @@ export default function PublicFormPage({ params }: PageProps) {
             className="w-full !py-8 !text-2xl !rounded-[40px] mt-12 shadow-[0_32px_64px_-16px_rgba(74,46,140,0.4)] hover:scale-[1.02]"
             icon={!submitting && <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 12h14M12 5l7 7-7 7"/></svg>}
           >
-            {submitting ? 'Recording Data…' : 'Submit Session'}
+            {submitting 
+              ? (submitStage === 'preparing' ? 'Preparing…' : submitStage === 'uploading' ? 'Uploading…' : submitStage === 'indexing' ? 'Indexing…' : 'Recording…') 
+              : 'Submit Session'}
           </Button>
         </form>
       </div>
