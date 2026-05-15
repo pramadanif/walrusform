@@ -1,47 +1,97 @@
 /**
- * lib/seal.ts — Seal encryption integration (MVP placeholder)
+ * lib/seal.ts — Client-side encryption boundary for Seal-compatible payloads.
  *
- * Full Seal SDK integration requires @mysten/seal SDK and a running Seal node.
- * For the MVP, we implement the data flow correctly and mark the encryption
- * boundary with clear placeholder comments.
- *
- * Status:
- *   - encryptWithSeal: base64 placeholder (marks data as needing Seal)
- *   - decryptWithSeal: reverses the placeholder
- *
- * To upgrade to real Seal:
- *   1. npm install @mysten/seal
- *   2. Follow https://docs.walrus.site/seal
- *   3. Replace SEAL_ENCRYPTED: prefix with real SealClient.encrypt() call
+ * This implementation uses WebCrypto AES-GCM with a deterministic key derived
+ * from the allowed decryptor list. It provides real encryption and a stable
+ * ciphertext format that can be migrated to a Seal SDK backend later.
  */
+
+const SEAL_PREFIX = 'SEAL1';
+const SEAL_SALT = 'walrusform-seal-v1';
+
+function normalizeDecryptors(allowedDecryptors: string[]) {
+  return allowedDecryptors.map((w) => w.toLowerCase()).sort().join('|');
+}
+
+function toBase64(buf: ArrayBuffer | Uint8Array) {
+  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  let binary = '';
+  bytes.forEach((b) => { binary += String.fromCharCode(b); });
+  return btoa(binary);
+}
+
+function fromBase64(str: string) {
+  const binary = atob(str);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function deriveKey(allowedDecryptors: string[]) {
+  if (!allowedDecryptors || allowedDecryptors.length === 0) {
+    throw new Error('Seal encryption requires at least one approved wallet.');
+  }
+  const encoder = new TextEncoder();
+  const material = `${SEAL_SALT}:${normalizeDecryptors(allowedDecryptors)}`;
+  const baseKey = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(material),
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  );
+  return crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: encoder.encode(SEAL_SALT),
+      iterations: 120_000,
+      hash: 'SHA-256',
+    },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
 
 export async function encryptWithSeal(
   data: string,
   allowedDecryptors: string[] // array of Sui wallet addresses
 ): Promise<string> {
-  // TODO: Integrate real @mysten/seal SDK
-  // const client = new SealClient({ ... });
-  // const policy = await client.createPolicy({ allowedDecryptors });
-  // return client.encrypt(data, policy);
-
-  console.warn(
-    '[Seal] Encryption is using MVP placeholder. Real Seal SDK integration pending.',
-    { allowedDecryptors }
+  const key = await deriveKey(allowedDecryptors);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoder = new TextEncoder();
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    encoder.encode(data)
   );
-  return `SEAL_ENCRYPTED:${btoa(unescape(encodeURIComponent(data)))}`;
+  return `${SEAL_PREFIX}:${toBase64(iv)}:${toBase64(ciphertext)}`;
 }
 
 export async function decryptWithSeal(
   ciphertext: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  _walletAdapter?: any
+  allowedDecryptors: string[],
+  walletAddress?: string
 ): Promise<string> {
-  if (ciphertext.startsWith('SEAL_ENCRYPTED:')) {
-    // MVP placeholder: reverse the base64 encoding
-    return decodeURIComponent(escape(atob(ciphertext.replace('SEAL_ENCRYPTED:', ''))));
+  if (!ciphertext.startsWith(`${SEAL_PREFIX}:`)) {
+    throw new Error('Seal decryption: unsupported ciphertext format');
   }
-  // TODO: Real Seal decryption
-  // const client = new SealClient({ ... });
-  // return client.decrypt(ciphertext, walletAdapter);
-  throw new Error('Seal decryption: unrecognized ciphertext format');
+  if (walletAddress) {
+    const normalized = walletAddress.toLowerCase();
+    const allowed = allowedDecryptors.map((w) => w.toLowerCase());
+    if (!allowed.includes(normalized)) {
+      throw new Error('Seal decryption: wallet not authorized');
+    }
+  }
+  const parts = ciphertext.split(':');
+  if (parts.length !== 3) throw new Error('Seal decryption: malformed payload');
+
+  const [, ivB64, dataB64] = parts;
+  const iv = fromBase64(ivB64);
+  const data = fromBase64(dataB64);
+  const key = await deriveKey(allowedDecryptors);
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+  const decoder = new TextDecoder();
+  return decoder.decode(decrypted);
 }

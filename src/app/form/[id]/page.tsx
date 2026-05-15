@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import React, { useEffect, useState, use } from 'react';
 import { GlassCard, Button, Badge } from '@/components/ui';
 import Image from 'next/image';
@@ -7,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import AppBackground from '@/components/AppBackground';
 import { loadFormDefinition, FormDefinition } from '@/lib/formStorage';
 import { submitForm } from '@/lib/submissionStorage';
+import { encryptWithSeal } from '@/lib/seal';
 import { RichTextInput } from '@/components/inputs/RichTextInput';
 import { FileUploadInput } from '@/components/inputs/FileUploadInput';
 import { getExplorerUrl } from '@/lib/walrus';
@@ -29,8 +32,8 @@ export default function PublicFormPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [answers, setAnswers] = useState<Record<string, any>>({});
-  const [mediaFiles, setMediaFiles] = useState<Record<string, File>>({});
+  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [mediaBlobIds, setMediaBlobIds] = useState<Record<string, string>>({});
 
   const [submitting, setSubmitting] = useState(false);
   const [submittedBlobId, setSubmittedBlobId] = useState<string | null>(null);
@@ -46,8 +49,16 @@ export default function PublicFormPage({ params }: PageProps) {
       .finally(() => setLoading(false));
   }, [blobId]);
 
-  const setAnswer = (fieldId: string, value: any) => {
-    setAnswers((prev) => ({ ...prev, [fieldId]: value }));
+  const setAnswer = (fieldId: string, value: unknown) => {
+    setAnswers((prev) => {
+      const next = { ...prev };
+      if (value === undefined || value === '') {
+        delete next[fieldId];
+      } else {
+        next[fieldId] = value;
+      }
+      return next;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -56,11 +67,30 @@ export default function PublicFormPage({ params }: PageProps) {
     setSubmitting(true);
     setSubmitError(null);
     try {
+      let answersToSubmit = answers;
+      let mediaToSubmit: Record<string, string> | undefined = mediaBlobIds;
+      let encrypted = false;
+
+      if (formDef.settings.encryptWithSeal) {
+        const allowed = formDef.settings.allowedDecryptors ?? [];
+        if (allowed.length === 0) {
+          throw new Error('Seal policy has no approved wallets.');
+        }
+        const sealedPayload = await encryptWithSeal(
+          JSON.stringify({ answers, mediaBlobIds }),
+          allowed
+        );
+        answersToSubmit = { __sealed: sealedPayload };
+        mediaToSubmit = undefined;
+        encrypted = true;
+      }
+
       const { submissionBlobId } = await submitForm(
-        blobId, 
-        answers, 
-        mediaFiles, 
-        account?.address
+        blobId,
+        answersToSubmit,
+        mediaToSubmit,
+        account?.address,
+        { encrypted }
       );
       setSubmittedBlobId(submissionBlobId);
     } catch (err: unknown) {
@@ -251,13 +281,13 @@ export default function PublicFormPage({ params }: PageProps) {
                 {(field.type === 'screenshot' || field.type === 'video') && (
                   <FileUploadInput
                     type={field.type as 'screenshot' | 'video'}
-                    onUploadComplete={(id, file) => {
+                    onUploadComplete={(id) => {
                       setAnswer(field.id, id);
-                      setMediaFiles((prev) => ({ ...prev, [field.id]: file }));
+                      setMediaBlobIds((prev) => ({ ...prev, [field.id]: id }));
                     }}
                     onClear={() => {
                       setAnswer(field.id, undefined);
-                      setMediaFiles((prev) => { const n = { ...prev }; delete n[field.id]; return n; });
+                      setMediaBlobIds((prev) => { const n = { ...prev }; delete n[field.id]; return n; });
                     }}
                   />
                 )}

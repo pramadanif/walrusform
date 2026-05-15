@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect */
+import React, { useState, useEffect } from 'react';
 import { GlassCard, Button, Badge } from '@/components/ui';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,8 +12,10 @@ import { getLocalFormRegistry, loadFormDefinition, FormDefinition } from '@/lib/
 import { getSubmissionsForForm, saveAdminMeta, AdminMeta, FormSubmission } from '@/lib/submissionStorage';
 import { exportSubmissionsToCSV } from '@/lib/csvExport';
 import { getExplorerUrl } from '@/lib/walrus';
+import { decryptWithSeal } from '@/lib/seal';
+import { useCurrentAccount } from '@mysten/dapp-kit';
 
-type Submission = FormSubmission & AdminMeta & { _blobId?: string; _formTitle?: string };
+type Submission = FormSubmission & AdminMeta & { _blobId?: string; _formTitle?: string; _decrypted?: boolean; _sealError?: string };
 
 const STATUS_OPTIONS = ['New', 'In Review', 'Actioned', 'Archived'] as const;
 
@@ -20,7 +23,7 @@ const STATUS_OPTIONS = ['New', 'In Review', 'Actioned', 'Archived'] as const;
 
 export default function DashboardPage() {
   const [responses, setResponses] = useState<Submission[]>([]);
-  const [forms, setForms] = useState<FormDefinition[]>([]);
+  const [forms, setForms] = useState<(FormDefinition & { _blobId: string })[]>([]);
   const [selectedFormId, setSelectedFormId] = useState<string | 'all'>('all');
   const [loadingResponses, setLoadingResponses] = useState(true);
   const [selectedResponse, setSelectedResponse] = useState<Submission | null>(null);
@@ -29,52 +32,88 @@ export default function DashboardPage() {
   const [savedNote, setSavedNote] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const router = useRouter();
+  const account = useCurrentAccount();
 
   // Load all submissions from all forms in registry
-  const loadAll = useCallback(async () => {
-    setLoadingResponses(true);
-    try {
-      const registry = getLocalFormRegistry();
-      const formIds = Object.keys(registry);
-
-      if (formIds.length === 0) {
-        setResponses([]);
-        return;
-      }
-
-      const formDefs = await Promise.allSettled(
-        formIds.map((id) => loadFormDefinition(id))
-      );
-      const loadedForms = formDefs
-        .filter((r): r is PromiseFulfilledResult<FormDefinition> => r.status === 'fulfilled')
-        .map((r) => r.value);
-      setForms(loadedForms);
-
-      const allSubsPerForm = await Promise.allSettled(
-        formIds.map((fid) => getSubmissionsForForm(fid).then((subs) =>
-          subs.map((sub) => ({
-            ...sub,
-            _formTitle: registry[fid]?.title ?? fid,
-          }))
-        ))
-      );
-
-      const all: Submission[] = (allSubsPerForm
-        .filter((r) => r.status === 'fulfilled') as PromiseFulfilledResult<Submission[]>[])
-        .flatMap((r) => r.value)
-        .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
-
-      setResponses(all);
-    } catch {
-      // silent
-    } finally {
-      setLoadingResponses(false);
-    }
-  }, []);
-
   useEffect(() => {
+    let active = true;
+    const loadAll = async () => {
+      setLoadingResponses(true);
+      try {
+        const registry = getLocalFormRegistry();
+        const formIds = Object.keys(registry);
+
+        if (formIds.length === 0) {
+          if (active) setResponses([]);
+          return;
+        }
+
+        const formDefs = await Promise.allSettled(
+          formIds.map((id) => loadFormDefinition(id).then((form) => ({ ...form, _blobId: id })))
+        );
+        const loadedForms = formDefs
+          .filter((r): r is PromiseFulfilledResult<FormDefinition & { _blobId: string }> => r.status === 'fulfilled')
+          .map((r) => r.value);
+        if (active) setForms(loadedForms);
+
+        const formByBlobId = Object.fromEntries(
+          loadedForms.map((form) => [form._blobId, form])
+        );
+
+        const allSubsPerForm = await Promise.allSettled(
+          formIds.map((fid) => getSubmissionsForForm(fid).then(async (subs) => {
+            const form = formByBlobId[fid];
+            const allowed = form?.settings.allowedDecryptors ?? [];
+            return Promise.all(subs.map(async (sub) => {
+              const base: Submission = {
+                ...sub,
+                _formTitle: registry[fid]?.title ?? fid,
+              };
+              if (!sub.encrypted || !(sub.answers as { __sealed?: string })?.__sealed) {
+                return base;
+              }
+              if (allowed.length === 0) {
+                return { ...base, _sealError: 'Seal policy missing.' };
+              }
+              if (!account?.address) {
+                return { ...base, _sealError: 'Connect wallet to decrypt.' };
+              }
+              try {
+                const raw = await decryptWithSeal(
+                  (sub.answers as { __sealed: string }).__sealed,
+                  allowed,
+                  account.address
+                );
+                const payload = JSON.parse(raw) as { answers?: Record<string, unknown>; mediaBlobIds?: Record<string, string> };
+                return {
+                  ...base,
+                  answers: payload.answers ?? {},
+                  mediaBlobIds: payload.mediaBlobIds ?? base.mediaBlobIds,
+                  _decrypted: true,
+                };
+              } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : 'Decrypt failed';
+                return { ...base, _sealError: msg };
+              }
+            }));
+          }))
+        );
+
+        const all: Submission[] = (allSubsPerForm
+          .filter((r) => r.status === 'fulfilled') as PromiseFulfilledResult<Submission[]>[])
+          .flatMap((r) => r.value)
+          .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+
+        if (active) setResponses(all);
+      } catch {
+        // silent
+      } finally {
+        if (active) setLoadingResponses(false);
+      }
+    };
     loadAll();
-  }, [loadAll]);
+    return () => { active = false; };
+  }, [account?.address]);
 
   const filtered = responses.filter((r) => {
     const inForm = selectedFormId === 'all' || r.formBlobId === selectedFormId;
@@ -123,21 +162,22 @@ export default function DashboardPage() {
   const handleArchive = () => handleStatusChange('Archived');
 
   const handleExportCSV = () => {
-    const formToExport = forms.find((f) => f.id === selectedFormId) ?? forms[0];
+    const formToExport = forms.find((f) => f._blobId === selectedFormId) ?? forms[0];
     if (!formToExport) return;
-    const subsForForm = responses.filter((r) => r.formBlobId === formToExport.id);
+    const subsForForm = responses.filter((r) => r.formBlobId === formToExport._blobId);
     exportSubmissionsToCSV(formToExport, subsForForm);
   };
 
-  const getPreview = (sub: Submission): string => {
-    const vals = Object.values(sub.answers ?? {});
-    const text = vals.find((v) => typeof v === 'string' && v.length > 0);
-    return typeof text === 'string' ? text.replace(/<[^>]*>/g, '').slice(0, 80) : sub.submissionId;
-  };
+  const [now, setNow] = useState(0);
+
+  useEffect(() => {
+    setNow(Date.now());
+  }, []);
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
-    const diff = Date.now() - d.getTime();
+    if (now === 0) return 'just now';
+    const diff = now - d.getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 60) return `${mins}m ago`;
     const hrs = Math.floor(mins / 60);
@@ -294,7 +334,13 @@ export default function DashboardPage() {
                   <Badge color="purple" className="!bg-white/20 !text-white !border-white/20 !mb-6">Advanced</Badge>
                   <h3 className="text-3xl font-syne font-extrabold mb-4">Walrus Node</h3>
                   <p className="text-white/60 font-jakarta text-[15px] leading-relaxed mb-10">Host your own storage node for maximum speed and control over your session data.</p>
-                  <Button variant="ghost" className="w-full !bg-white !text-[#4a2e8c] font-extrabold !py-4 hover:scale-[1.02]">Configure Node</Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full !bg-white !text-[#4a2e8c] font-extrabold !py-4 hover:scale-[1.02]"
+                    onClick={() => window.open('https://docs.walrus.site/', '_blank')}
+                  >
+                    Configure Node
+                  </Button>
                 </div>
                 <div className="absolute -bottom-10 -right-10 w-48 h-48 opacity-10 group-hover:scale-110 group-hover:-rotate-12 transition-all duration-1000">
                   <Image src="/wal-footer.avif" alt="Mascot" fill className="object-contain" />

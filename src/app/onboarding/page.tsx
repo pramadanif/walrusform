@@ -1,16 +1,40 @@
 "use client";
 
-import React, { useState } from 'react';
-import { GlassCard, Button } from '@/components/ui';
+import React, { useState, useEffect } from 'react';
+import { Button } from '@/components/ui';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import AppBackground from '@/components/AppBackground';
+import { saveFormDefinition, FormDefinition, FormField, getLocalFormRegistry } from '@/lib/formStorage';
+import { getSubmissionsForForm } from '@/lib/submissionStorage';
 
 export default function OnboardingPage() {
   const [step, setStep] = useState(1);
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftFields, setDraftFields] = useState<FormField[]>([]);
+  const [deploying, setDeploying] = useState(false);
+  const [deployError, setDeployError] = useState<string | null>(null);
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [formBlobId, setFormBlobId] = useState<string | null>(null);
+  const [stats, setStats] = useState({ responses: 0, forms: 0 });
   const router = useRouter();
 
   const nextStep = () => setStep(s => Math.min(s + 1, 4));
+
+  useEffect(() => {
+    const loadStats = async () => {
+      const registry = getLocalFormRegistry();
+      const formIds = Object.keys(registry);
+      const counts = await Promise.allSettled(
+        formIds.map((id) => getSubmissionsForForm(id).then((subs) => subs.length))
+      );
+      const responses = counts
+        .filter((r): r is PromiseFulfilledResult<number> => r.status === 'fulfilled')
+        .reduce((sum, r) => sum + r.value, 0);
+      setStats({ responses, forms: formIds.length });
+    };
+    loadStats();
+  }, [formBlobId]);
 
   return (
     <div className="min-h-screen p-8 flex flex-col items-center relative">
@@ -52,9 +76,40 @@ export default function OnboardingPage() {
       <div className="w-full max-w-[800px] relative z-10 text-black">
         <AnimatePresence mode="wait">
           {step === 1 && <StepWelcome key="1" onNext={nextStep} />}
-          {step === 2 && <StepCreate key="2" onNext={nextStep} />}
-          {step === 3 && <StepShare key="3" onNext={nextStep} />}
-          {step === 4 && <StepFinal key="4" onNext={() => router.push('/dashboard')} />}
+          {step === 2 && (
+            <StepCreate
+              key="2"
+              onNext={nextStep}
+              title={draftTitle}
+              setTitle={setDraftTitle}
+              fields={draftFields}
+              setFields={setDraftFields}
+            />
+          )}
+          {step === 3 && (
+            <StepShare
+              key="3"
+              onNext={nextStep}
+              title={draftTitle}
+              fields={draftFields}
+              deploying={deploying}
+              setDeploying={setDeploying}
+              deployError={deployError}
+              setDeployError={setDeployError}
+              shareLink={shareLink}
+              setShareLink={setShareLink}
+              formBlobId={formBlobId}
+              setFormBlobId={setFormBlobId}
+            />
+          )}
+          {step === 4 && (
+            <StepFinal
+              key="4"
+              onNext={() => router.push('/dashboard')}
+              responses={stats.responses}
+              forms={stats.forms}
+            />
+          )}
         </AnimatePresence>
       </div>
     </div>
@@ -89,8 +144,30 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
   );
 }
 
-function StepCreate({ onNext }: { onNext: () => void }) {
-  const [fields, setFields] = useState<string[]>([]);
+function StepCreate({
+  onNext,
+  title,
+  setTitle,
+  fields,
+  setFields,
+}: {
+  onNext: () => void;
+  title: string;
+  setTitle: (val: string) => void;
+  fields: FormField[];
+  setFields: (val: FormField[]) => void;
+}) {
+  const addField = (type: 'text' | 'starrating' | 'dropdown' | 'checkbox') => {
+    const newField: FormField = {
+      id: crypto.randomUUID(),
+      type,
+      label: type === 'starrating' ? 'Rating' : type.charAt(0).toUpperCase() + type.slice(1),
+      required: false,
+      placeholder: type === 'text' ? 'Type here...' : undefined,
+      options: type === 'dropdown' ? ['Option A', 'Option B'] : undefined,
+    };
+    setFields([...fields, newField]);
+  };
   
   return (
     <motion.div 
@@ -103,6 +180,8 @@ function StepCreate({ onNext }: { onNext: () => void }) {
       <input 
         type="text" 
         placeholder="e.g. Bug Report, Community Survey..."
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
         className="w-full bg-white/70 backdrop-blur-md border border-gray-200 rounded-2xl px-6 py-4 font-jakarta text-black mb-10 outline-none focus:border-[#cdb4ff] focus:ring-4 focus:ring-[#cdb4ff]/10 transition-all shadow-sm"
       />
 
@@ -110,7 +189,12 @@ function StepCreate({ onNext }: { onNext: () => void }) {
         {['Text', 'Rating', 'Dropdown', 'Checkbox'].map((type) => (
           <button 
             key={type}
-            onClick={() => setFields([...fields, type])}
+            onClick={() => {
+              if (type === 'Text') addField('text');
+              if (type === 'Rating') addField('starrating');
+              if (type === 'Dropdown') addField('dropdown');
+              if (type === 'Checkbox') addField('checkbox');
+            }}
             className="px-4 py-2 rounded-full border border-gray-200 text-gray-600 font-jakarta text-xs hover:border-[#cdb4ff] hover:bg-white transition-all font-medium"
           >
             {type}
@@ -127,22 +211,80 @@ function StepCreate({ onNext }: { onNext: () => void }) {
               animate={{ opacity: 1, x: 0 }}
               className="glass-card !p-4 !rounded-xl flex items-center justify-between text-left !bg-white/90"
             >
-              <span className="font-outfit font-bold text-sm">{f} Field</span>
+              <span className="font-outfit font-bold text-sm">{f.label} Field</span>
               <div className="w-4 h-4 rounded-full border-2 border-[#cdb4ff]"></div>
             </motion.div>
           ))}
         </AnimatePresence>
       </div>
 
-      <Button onClick={onNext} className="mx-auto">
+      <Button onClick={onNext} className="mx-auto" disabled={!title.trim() || fields.length === 0}>
         Continue →
       </Button>
     </motion.div>
   );
 }
 
-function StepShare({ onNext }: { onNext: () => void }) {
+function StepShare({
+  onNext,
+  title,
+  fields,
+  deploying,
+  setDeploying,
+  deployError,
+  setDeployError,
+  shareLink,
+  setShareLink,
+  formBlobId,
+  setFormBlobId,
+}: {
+  onNext: () => void;
+  title: string;
+  fields: FormField[];
+  deploying: boolean;
+  setDeploying: (val: boolean) => void;
+  deployError: string | null;
+  setDeployError: (val: string | null) => void;
+  shareLink: string | null;
+  setShareLink: (val: string | null) => void;
+  formBlobId: string | null;
+  setFormBlobId: (val: string | null) => void;
+}) {
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const deploy = async () => {
+      if (formBlobId || deploying) return;
+      if (!title.trim() || fields.length === 0) {
+        setDeployError('Add a title and at least one field to deploy.');
+        return;
+      }
+      setDeploying(true);
+      setDeployError(null);
+      try {
+        const formDef: FormDefinition = {
+          id: crypto.randomUUID(),
+          title: title.trim(),
+          description: 'Created via onboarding',
+          fields,
+          createdAt: new Date().toISOString(),
+          settings: { requireWallet: false, encryptWithSeal: false },
+        };
+        const blobId = await saveFormDefinition(formDef);
+        setFormBlobId(blobId);
+        setShareLink(`${window.location.origin}/form/${blobId}`);
+      } catch (e: unknown) {
+        setDeployError(e instanceof Error ? e.message : 'Deployment failed');
+      } finally {
+        setDeploying(false);
+      }
+    };
+    deploy();
+  }, [formBlobId, deploying, title, fields, setDeploying, setDeployError, setFormBlobId, setShareLink]);
+
+  const tweetUrl = shareLink
+    ? `https://twitter.com/intent/tweet?text=${encodeURIComponent('New WalrusForm session:')}%20${encodeURIComponent(shareLink)}`
+    : '#';
 
   return (
     <motion.div 
@@ -154,17 +296,39 @@ function StepShare({ onNext }: { onNext: () => void }) {
       <h1 className="text-4xl font-outfit font-bold mb-4">Your form is live.</h1>
       
       <div className="glass-card !bg-white/90 !p-4 flex items-center justify-between mb-6 group !rounded-2xl">
-        <code className="text-[#4a2e8c] font-jakarta font-bold text-sm">walrus.form/7x2k9s</code>
-        <button onClick={() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="text-gray-400 hover:text-[#4a2e8c] transition-colors">
+        <code className="text-[#4a2e8c] font-jakarta font-bold text-sm break-all">{shareLink ?? 'Deploying...'}</code>
+        <button
+          onClick={() => {
+            if (!shareLink) return;
+            navigator.clipboard.writeText(shareLink).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            });
+          }}
+          className="text-gray-400 hover:text-[#4a2e8c] transition-colors"
+        >
           {copied ? "✓" : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>}
         </button>
       </div>
 
-      <Button variant="ghost" className="w-full mb-12 !py-4 shadow-sm">
+      {deployError && (
+        <div className="mb-6 text-red-500 font-jakarta font-bold text-xs uppercase tracking-widest">
+          {deployError}
+        </div>
+      )}
+
+      <Button
+        variant="ghost"
+        className="w-full mb-12 !py-4 shadow-sm"
+        disabled={!shareLink}
+        onClick={() => {
+          if (shareLink) window.open(tweetUrl, '_blank');
+        }}
+      >
         Share on X with #Walrus
       </Button>
 
-      <Button onClick={onNext} className="mx-auto">
+      <Button onClick={onNext} className="mx-auto" disabled={!shareLink}>
         Go to Dashboard →
       </Button>
 
@@ -181,7 +345,7 @@ function StepShare({ onNext }: { onNext: () => void }) {
   );
 }
 
-function StepFinal({ onNext }: { onNext: () => void }) {
+function StepFinal({ onNext, responses, forms }: { onNext: () => void; responses: number; forms: number }) {
   return (
     <motion.div 
       initial={{ opacity: 0, scale: 0.95 }}
@@ -198,11 +362,11 @@ function StepFinal({ onNext }: { onNext: () => void }) {
       <div className="grid grid-cols-2 gap-4 mb-12">
         <div className="glass-card !p-6 !bg-white/80">
           <div className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mb-1">Responses</div>
-          <div className="text-3xl font-outfit font-bold">0</div>
+          <div className="text-3xl font-outfit font-bold">{responses}</div>
         </div>
         <div className="glass-card !p-6 !bg-white/80">
           <div className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mb-1">Active</div>
-          <div className="text-3xl font-outfit font-bold">1</div>
+          <div className="text-3xl font-outfit font-bold">{forms}</div>
         </div>
       </div>
       <Button onClick={onNext} className="mx-auto">

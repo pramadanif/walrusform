@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { GlassCard, Button, Badge } from '@/components/ui';
 import { useRouter } from 'next/navigation';
 import { useCurrentAccount, ConnectButton } from '@mysten/dapp-kit';
@@ -29,6 +29,7 @@ const TABS = [
 
 const SEAL_WALLETS_KEY = 'walrusform_seal_wallets';
 const TEAM_KEY = 'walrusform_team';
+const NOTIFICATIONS_KEY = 'walrusform_notifications';
 
 function getSealWallets(): string[] {
   if (typeof window === 'undefined') return [];
@@ -44,25 +45,36 @@ function getTeamMembers(): { address: string; role: string }[] {
 function saveTeamMembers(members: { address: string; role: string }[]) {
   localStorage.setItem(TEAM_KEY, JSON.stringify(members));
 }
+function getNotifications(): { submissions: boolean; digest: boolean; system: boolean } {
+  if (typeof window === 'undefined') return { submissions: true, digest: false, system: true };
+  try {
+    return JSON.parse(localStorage.getItem(NOTIFICATIONS_KEY) ?? '{"submissions":true,"digest":false,"system":true}');
+  } catch {
+    return { submissions: true, digest: false, system: true };
+  }
+}
+function saveNotifications(prefs: { submissions: boolean; digest: boolean; system: boolean }) {
+  localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(prefs));
+}
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('Profile');
   const router = useRouter();
   const account = useCurrentAccount();
+  const importRef = useRef<HTMLInputElement>(null);
 
   // Seal policy state
-  const [sealWallets, setSealWallets] = useState<string[]>([]);
+  const [sealWallets, setSealWallets] = useState<string[]>(() => getSealWallets());
   const [newWallet, setNewWallet] = useState('');
   const [sealSaved, setSealSaved] = useState(false);
 
   // Team state
-  const [teamMembers, setTeamMembers] = useState<{ address: string; role: string }[]>([]);
+  const [teamMembers, setTeamMembers] = useState<{ address: string; role: string }[]>(() => getTeamMembers());
   const [newTeamAddress, setNewTeamAddress] = useState('');
 
-  useEffect(() => {
-    setSealWallets(getSealWallets());
-    setTeamMembers(getTeamMembers());
-  }, []);
+  // Notifications
+  const [notifications, setNotifications] = useState(() => getNotifications());
+  const [dataMessage, setDataMessage] = useState<string | null>(null);
 
   const addSealWallet = () => {
     const w = newWallet.trim();
@@ -102,6 +114,53 @@ export default function SettingsPage() {
       .filter((k) => k.startsWith('walrusform_'))
       .forEach((k) => localStorage.removeItem(k));
     router.push('/');
+  };
+
+  const toggleNotification = (key: 'submissions' | 'digest' | 'system') => {
+    const updated = { ...notifications, [key]: !notifications[key] };
+    setNotifications(updated);
+    saveNotifications(updated);
+  };
+
+  const handleExportData = () => {
+    const data: Record<string, string> = {};
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith('walrusform_'))
+      .forEach((k) => {
+        const value = localStorage.getItem(k);
+        if (value !== null) data[k] = value;
+      });
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `walrusform_backup_${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setDataMessage('Exported local data.');
+    setTimeout(() => setDataMessage(null), 2000);
+  };
+
+  const handleImportData = async (file: File) => {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as Record<string, string>;
+      Object.entries(parsed).forEach(([key, value]) => {
+        if (key.startsWith('walrusform_')) localStorage.setItem(key, value);
+      });
+      setSealWallets(getSealWallets());
+      setTeamMembers(getTeamMembers());
+      setNotifications(getNotifications());
+      setDataMessage('Imported local data.');
+    } catch (e: unknown) {
+      setDataMessage(e instanceof Error ? e.message : 'Import failed');
+    } finally {
+      setTimeout(() => setDataMessage(null), 2500);
+      if (importRef.current) importRef.current.value = '';
+    }
   };
 
   return (
@@ -203,7 +262,9 @@ export default function SettingsPage() {
                         <h2 className="text-3xl font-syne font-extrabold text-black">Seal Encryption</h2>
                         <p className="text-gray-400 font-jakarta font-bold text-xs uppercase tracking-widest">End-to-end privacy policy</p>
                       </div>
-                      <Badge color="purple">MVP Placeholder</Badge>
+                      <Badge color={sealWallets.length > 0 ? 'green' : 'gray'}>
+                        {sealWallets.length > 0 ? 'Active' : 'Inactive'}
+                      </Badge>
                     </div>
 
                     <p className="text-sm text-gray-500 font-jakarta font-medium leading-relaxed mb-10 max-w-2xl">
@@ -311,13 +372,81 @@ export default function SettingsPage() {
                   </GlassCard>
                 )}
 
-                {(activeTab === 'Notifications' || activeTab === 'Export & Data') && (
-                  <GlassCard className="!p-12 !rounded-[40px] !bg-white/90 flex flex-col items-center justify-center text-center min-h-[400px]">
-                    <div className="w-20 h-20 rounded-full bg-gray-50 flex items-center justify-center mb-6 text-gray-300">
-                      <ProfileIcon />
+                {activeTab === 'Notifications' && (
+                  <GlassCard className="!p-10 !rounded-[40px] !bg-white/90 border-white shadow-xl">
+                    <div className="mb-10">
+                      <h2 className="text-3xl font-syne font-extrabold text-black">Notifications</h2>
+                      <p className="text-gray-400 font-jakarta font-bold text-xs uppercase tracking-widest mt-1">Control delivery preferences</p>
                     </div>
-                    <h3 className="text-2xl font-syne font-extrabold text-black mb-2">Coming Soon</h3>
-                    <p className="text-gray-400 font-jakarta font-bold text-xs uppercase tracking-widest">Planned for Version 2.0</p>
+
+                    <div className="space-y-6">
+                      {[
+                        { key: 'submissions', title: 'Submission Alerts', desc: 'Notify on new Walrus responses.' },
+                        { key: 'digest', title: 'Weekly Digest', desc: 'Summary of form activity.' },
+                        { key: 'system', title: 'System Updates', desc: 'Protocol and client updates.' },
+                      ].map((row) => (
+                        <div key={row.key} className="p-6 rounded-[28px] bg-gray-50/50 border border-black/5 flex items-center justify-between">
+                          <div>
+                            <div className="font-jakarta font-bold text-sm text-black">{row.title}</div>
+                            <div className="text-[11px] text-gray-400 font-jakarta font-bold uppercase tracking-widest mt-1">{row.desc}</div>
+                          </div>
+                          <button
+                            onClick={() => toggleNotification(row.key as 'submissions' | 'digest' | 'system')}
+                            className={`w-14 h-7 rounded-full p-1 transition-all duration-500 ${notifications[row.key as 'submissions' | 'digest' | 'system'] ? 'bg-[#4a2e8c]' : 'bg-gray-200 shadow-inner'}`}
+                          >
+                            <motion.div
+                              animate={{ x: notifications[row.key as 'submissions' | 'digest' | 'system'] ? 28 : 0 }}
+                              className="w-5 h-5 rounded-full bg-white shadow-xl"
+                            />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </GlassCard>
+                )}
+
+                {activeTab === 'Export & Data' && (
+                  <GlassCard className="!p-10 !rounded-[40px] !bg-white/90 border-white shadow-xl">
+                    <div className="mb-10">
+                      <h2 className="text-3xl font-syne font-extrabold text-black">Export & Data</h2>
+                      <p className="text-gray-400 font-jakarta font-bold text-xs uppercase tracking-widest mt-1">Backup or restore local indexes</p>
+                    </div>
+
+                    <div className="space-y-6">
+                      <div className="p-6 rounded-[28px] bg-gray-50/50 border border-black/5">
+                        <div className="font-jakarta font-bold text-sm text-black mb-2">Export Local Data</div>
+                        <p className="text-[11px] text-gray-400 font-jakarta font-bold uppercase tracking-widest mb-4">Includes form registry, submissions, notes</p>
+                        <Button className="!rounded-full !px-8 !py-3" onClick={handleExportData}>Download JSON</Button>
+                      </div>
+
+                      <div className="p-6 rounded-[28px] bg-gray-50/50 border border-black/5">
+                        <div className="font-jakarta font-bold text-sm text-black mb-2">Import Backup</div>
+                        <p className="text-[11px] text-gray-400 font-jakarta font-bold uppercase tracking-widest mb-4">Restores local registry and metadata</p>
+                        <input
+                          ref={importRef}
+                          type="file"
+                          accept="application/json"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleImportData(file);
+                          }}
+                        />
+                        <Button
+                          variant="ghost"
+                          className="!rounded-full !px-8 !py-3"
+                          onClick={() => importRef.current?.click()}
+                        >
+                          Upload JSON
+                        </Button>
+                      </div>
+
+                      {dataMessage && (
+                        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-[11px] font-jakarta font-bold text-green-500 px-2">
+                          {dataMessage}
+                        </motion.p>
+                      )}
+                    </div>
                   </GlassCard>
                 )}
               </motion.div>

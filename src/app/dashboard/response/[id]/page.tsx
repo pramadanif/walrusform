@@ -7,6 +7,8 @@ import { getSubmissionsForForm, FormSubmission, AdminMeta, saveAdminMeta } from 
 import { getLocalFormRegistry, loadFormDefinition, FormDefinition } from '@/lib/formStorage';
 import { getExplorerUrl } from '@/lib/walrus';
 import AppBackground from '@/components/AppBackground';
+import { decryptWithSeal } from '@/lib/seal';
+import { useCurrentAccount } from '@mysten/dapp-kit';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -19,6 +21,7 @@ const STATUS_OPTIONS = ['New', 'In Review', 'Actioned', 'Archived'] as const;
 export default function ResponseDetailPage({ params }: PageProps) {
   const { id: blobId } = use(params);
   const router = useRouter();
+  const account = useCurrentAccount();
 
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [formDef, setFormDef] = useState<FormDefinition | null>(null);
@@ -29,6 +32,7 @@ export default function ResponseDetailPage({ params }: PageProps) {
   const [savingNote, setSavingNote] = useState(false);
   const [savedNote, setSavedNote] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sealError, setSealError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -55,9 +59,34 @@ export default function ResponseDetailPage({ params }: PageProps) {
         if (!found) {
           setError(`Submission not found in local registry. Blob ID: ${blobId}`);
         } else {
-          setSubmission(found);
+          let next = found;
+          if (found.encrypted && (found.answers as { __sealed?: string })?.__sealed && foundForm) {
+            const allowed = foundForm.settings.allowedDecryptors ?? [];
+            if (allowed.length === 0) {
+              setSealError('Seal policy missing.');
+            } else if (!account?.address) {
+              setSealError('Connect wallet to decrypt.');
+            } else {
+              try {
+                const raw = await decryptWithSeal(
+                  (found.answers as { __sealed: string }).__sealed,
+                  allowed,
+                  account.address
+                );
+                const payload = JSON.parse(raw) as { answers?: Record<string, unknown>; mediaBlobIds?: Record<string, string> };
+                next = {
+                  ...found,
+                  answers: payload.answers ?? {},
+                  mediaBlobIds: payload.mediaBlobIds ?? found.mediaBlobIds,
+                };
+              } catch (e: unknown) {
+                setSealError(e instanceof Error ? e.message : 'Decrypt failed');
+              }
+            }
+          }
+          setSubmission(next);
           setFormDef(foundForm);
-          setNoteInput(found.adminNote ?? '');
+          setNoteInput(next.adminNote ?? '');
         }
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed to load submission');
@@ -66,7 +95,7 @@ export default function ResponseDetailPage({ params }: PageProps) {
       }
     };
     loadData();
-  }, [blobId]);
+  }, [blobId, account?.address]);
 
   const handleSaveNote = () => {
     if (!submission?._blobId) return;
@@ -173,6 +202,14 @@ export default function ResponseDetailPage({ params }: PageProps) {
 
             {/* Left Column: Answer Content */}
             <div className="space-y-8">
+              {sealError && (
+                <GlassCard className="!p-8">
+                  <label className="text-[10px] font-mono text-[#00E5CC] uppercase tracking-[0.2em] font-bold mb-4 block">
+                    Encrypted Response
+                  </label>
+                  <p className="text-[#7A8CAB] font-mono text-sm">{sealError}</p>
+                </GlassCard>
+              )}
               {Object.entries(submission.answers ?? {}).map(([fieldId, value]) => {
                 const label = getFieldLabel(fieldId);
                 const isNumber = typeof value === 'number';

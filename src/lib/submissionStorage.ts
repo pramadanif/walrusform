@@ -7,7 +7,7 @@ export interface FormSubmission {
   formBlobId: string;        // which form this belongs to
   submittedAt: string;
   submitterWallet?: string;
-  answers: Record<string, any>; // fieldId → value
+  answers: Record<string, unknown>; // fieldId → value
   mediaBlobIds?: Record<string, string>; // fieldId → walrus blobId for files
   encrypted: boolean;
   // Admin-only fields — stored in localStorage, NOT in the Walrus blob
@@ -54,38 +54,29 @@ export function saveAdminMeta(submissionBlobId: string, meta: AdminMeta): void {
  */
 export async function submitForm(
   formBlobId: string,
-  answers: Record<string, any>,
-  mediaFiles?: Record<string, File>,
-  submitterWallet?: string
+  answers: Record<string, unknown>,
+  mediaBlobIds?: Record<string, string>,
+  submitterWallet?: string,
+  options?: { encrypted?: boolean }
 ): Promise<{ submissionBlobId: string }> {
-  // 1. Upload any media files first (screenshot / video)
-  const mediaBlobIds: Record<string, string> = {};
-  if (mediaFiles) {
-    for (const [fieldId, file] of Object.entries(mediaFiles)) {
-      const buffer = await file.arrayBuffer();
-      const { blobId } = await uploadToWalrus(buffer, { contentType: file.type, epochs: 10 });
-      mediaBlobIds[fieldId] = blobId;
-    }
-  }
-
-  // 2. Build submission object
+  // Build submission object
   const submission: FormSubmission = {
     submissionId: crypto.randomUUID(),
     formBlobId,
     submittedAt: new Date().toISOString(),
     submitterWallet,
     answers,
-    mediaBlobIds: Object.keys(mediaBlobIds).length > 0 ? mediaBlobIds : undefined,
-    encrypted: false,
+    mediaBlobIds: mediaBlobIds && Object.keys(mediaBlobIds).length > 0 ? mediaBlobIds : undefined,
+    encrypted: options?.encrypted ?? false,
   };
 
-  // 3. Upload submission JSON to Walrus
+  // Upload submission JSON to Walrus
   const { blobId } = await uploadToWalrus(JSON.stringify(submission), {
     contentType: 'application/json',
     epochs: 10,
   });
 
-  // 4. Index submission blobId in localStorage
+  // Index submission blobId in localStorage
   const key = subKey(formBlobId);
   const existing: { blobId: string; submittedAt: string }[] = JSON.parse(
     localStorage.getItem(key) ?? '[]'
@@ -116,6 +107,9 @@ export async function getSubmissionsForForm(
   );
 
   return submissions
-    .filter((r): r is PromiseFulfilledResult<FormSubmission & AdminMeta> => r.status === 'fulfilled')
+    .filter(
+      (r): r is PromiseFulfilledResult<FormSubmission & AdminMeta & { _blobId: string }> =>
+        r.status === 'fulfilled'
+    )
     .map((r) => r.value);
 }

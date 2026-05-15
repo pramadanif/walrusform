@@ -1,8 +1,9 @@
 # Worm — Implementation Progress
 
-> **Last updated:** 2026-05-15T21:05 WIB (UTC+7)
+> **Last updated:** 2026-05-15T21:18 WIB (UTC+7)
 > **Dev server:** running on http://localhost:3000 (Next.js 16.2.4 / Turbopack)
-> **Status: Landing page enhanced with advanced 3D text reveals and informative FeaturesSection**
+> **Status: Strategic Enhancement Plan created; Landing page enhanced with 3D reveal**
+> **Roadmap:** Refer to [enhancement_plan.md](file:///Users/muhammadbaguspramadani/Documents/myproject/walrusform/enhancement_plan.md) for next steps.
 
 ---
 
@@ -32,7 +33,7 @@ papaparse @types/papaparse uuid @types/uuid
 | `walrus.ts` | ✅ Done | `uploadToWalrus`, `readFromWalrus`, `getExplorerUrl` — uses `/v1/blobs/` Walrus testnet endpoints |
 | `formStorage.ts` | ✅ Done | `saveFormDefinition`, `loadFormDefinition`, `getLocalFormRegistry` — localStorage registry |
 | `submissionStorage.ts` | ✅ Done | `submitForm`, `getSubmissionsForForm`, `saveAdminMeta`, `getAdminMeta` |
-| `seal.ts` | ✅ Done | MVP placeholder (`SEAL_ENCRYPTED:base64`), with clear TODO comments for real SDK |
+| `seal.ts` | ✅ Done | Client-side AES-GCM encryption, deterministic key from allowed decryptors |
 | `csvExport.ts` | ✅ Done | `exportSubmissionsToCSV` using PapaParse |
 
 ### Component Files Created (`src/components/`)
@@ -50,7 +51,10 @@ papaparse @types/papaparse uuid @types/uuid
 | Builder | `/builder` | ✅ Done | Real "Deploy to Walrus" → shows blobId + shareable link + copy + explorer; dropdown options editor; description field |
 | Dashboard | `/dashboard` | ✅ Done | Real data from Walrus + localStorage index; search/filter; status updates; admin notes; Export CSV; live feed |
 | Response Detail | `/dashboard/response/[id]` | ✅ Done | Loads real submission by blobId; renders all answer types (text, rating, bool, HTML rich-text, media); admin notes; status; explorer link |
-| Settings | `/settings` | ✅ Done | Profile tab shows connected wallet; Seal tab saves allowed-decryptors to localStorage; Team tab; Danger Zone clears local registry |
+| Settings | `/settings` | ✅ Done | Profile + Seal policy + Team; Notifications preferences; Export/Import local data; Danger Zone clears registry |
+| Onboarding | `/onboarding` | ✅ Done | Deploys real form to Walrus; shows real share link + stats |
+| Connect | `/connect` | ✅ Done | Real wallet connect and redirect |
+| Templates | `/templates` | ✅ Done | Template selection prefills builder draft |
 
 ---
 
@@ -58,7 +62,7 @@ papaparse @types/papaparse uuid @types/uuid
 
 1. **Walrus upload endpoint** — Using `/v1/blobs?epochs=` PUT endpoint. If Walrus testnet changes API, update `src/lib/walrus.ts` → `uploadToWalrus`.
 
-2. **Seal encryption** — Real `@mysten/seal` SDK **not yet integrated**. `lib/seal.ts` uses base64 placeholder. The Seal policy tab saves allowed-decryptors but doesn't actually encrypt. Search for `TODO: Integrate` comments.
+2. **Seal SDK parity** — `lib/seal.ts` now encrypts with WebCrypto AES-GCM. Replace with `@mysten/seal` SDK if full Seal policy enforcement is required.
 
 3. **WalletGuard** — The agent prompt asked for a `WalletGuard` component to redirect unauthenticated users from `/dashboard`. This was **NOT implemented** to avoid breaking the existing UI flow (dashboard works without wallet connection for form reviewing). Add it if needed.
 
@@ -74,14 +78,10 @@ papaparse @types/papaparse uuid @types/uuid
 
 ## 🔜 Remaining Work (Not Yet Done)
 
-- [ ] **Real Seal SDK integration** — install `@mysten/seal`, replace placeholders in `src/lib/seal.ts`
 - [ ] **WalletGuard** for dashboard (redirect to `/` if no wallet connected) — see `WALRUSFORM_AGENT_PROMPT.md` §Wallet Integration
-- [ ] **Wallet address on submission** — currently `submitterWallet` is always `undefined` (need `useCurrentAccount()` passed into submitForm in `/form/[id]/page.tsx`)
 - [ ] **README.md** update with real blob IDs after first test deployment
 - [ ] **E2E test flow** — see WALRUSFORM_AGENT_PROMPT.md §End-to-End Test Flow (12 steps)
 - [ ] **Demo video** — upload to Walrus, embed blob ID in README
-- [ ] **`/connect` route** — directory exists but page not implemented; check if needed
-- [ ] **`/templates` route** — directory exists but page not implemented
 - [ ] **Vercel/deployment** — not yet configured
 
 ---

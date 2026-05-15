@@ -6,18 +6,34 @@ import { GlassCard, Button, Badge } from '@/components/ui';
 import Navbar from '@/components/Navbar';
 import AppBackground from '@/components/AppBackground';
 import Footer from '@/components/Footer';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { FormField } from '@/lib/formStorage';
 
-const TEMPLATES = [
+type Template = {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  color: string;
+  tag: string;
+  fields: Omit<FormField, 'id'>[];
+};
+
+const TEMPLATES: Template[] = [
   {
     id: 'feedback',
     title: 'Community Feedback',
     description: 'Collect structured feedback from your protocol users or DAO members.',
     icon: '💬',
     color: '#cdb4ff',
-    fields: 5,
-    tag: 'Popular'
+    tag: 'Popular',
+    fields: [
+      { type: 'text', label: 'What should we improve?', required: true, placeholder: 'Share your feedback...' },
+      { type: 'starrating', label: 'Overall experience', required: true },
+      { type: 'dropdown', label: 'Primary use case', required: false, options: ['DeFi', 'DAO', 'Community', 'Developer Tool'] },
+      { type: 'url', label: 'Relevant link', required: false, placeholder: 'https://' },
+      { type: 'confirmation', label: 'Consent', required: true, placeholder: 'I agree to share this feedback' },
+    ]
   },
   {
     id: 'grant',
@@ -25,8 +41,15 @@ const TEMPLATES = [
     description: 'A comprehensive form for builders applying for ecosystem grants.',
     icon: '🏗️',
     color: '#e0f2fe',
-    fields: 12,
-    tag: 'New'
+    tag: 'New',
+    fields: [
+      { type: 'text', label: 'Project name', required: true, placeholder: 'Name your project' },
+      { type: 'richtext', label: 'Project overview', required: true, placeholder: 'Describe the project and goals' },
+      { type: 'dropdown', label: 'Stage', required: true, options: ['Idea', 'Prototype', 'MVP', 'Live'] },
+      { type: 'url', label: 'Pitch deck', required: false, placeholder: 'https://' },
+      { type: 'url', label: 'Repository', required: false, placeholder: 'https://' },
+      { type: 'confirmation', label: 'I confirm this information is accurate', required: true },
+    ]
   },
   {
     id: 'bug-report',
@@ -34,8 +57,15 @@ const TEMPLATES = [
     description: 'Standardized bug reporting with screenshot and video support.',
     icon: '🐞',
     color: '#dcfce7',
-    fields: 6,
-    tag: 'Utility'
+    tag: 'Utility',
+    fields: [
+      { type: 'text', label: 'Bug title', required: true, placeholder: 'Short summary' },
+      { type: 'richtext', label: 'Repro steps', required: true, placeholder: 'Step-by-step details' },
+      { type: 'dropdown', label: 'Severity', required: true, options: ['Low', 'Medium', 'High', 'Critical'] },
+      { type: 'screenshot', label: 'Screenshot', required: false },
+      { type: 'video', label: 'Video capture', required: false },
+      { type: 'confirmation', label: 'I confirm this report is accurate', required: true },
+    ]
   },
   {
     id: 'survey',
@@ -43,8 +73,14 @@ const TEMPLATES = [
     description: 'Understand your audience with deep analytics-ready surveys.',
     icon: '📊',
     color: '#fae8ff',
-    fields: 15,
-    tag: 'Deep'
+    tag: 'Deep',
+    fields: [
+      { type: 'text', label: 'Role', required: true, placeholder: 'Developer, Founder, Investor...' },
+      { type: 'dropdown', label: 'Primary chain', required: true, options: ['Sui', 'Ethereum', 'Solana', 'Other'] },
+      { type: 'starrating', label: 'Satisfaction', required: true },
+      { type: 'richtext', label: 'What do you want next?', required: false, placeholder: 'Share your ideas' },
+      { type: 'confirmation', label: 'May we contact you?', required: false, placeholder: 'Yes, you may follow up' },
+    ]
   },
   {
     id: 'event',
@@ -52,8 +88,14 @@ const TEMPLATES = [
     description: 'Perfect for hackathons, workshops, and community meetups.',
     icon: '🎟️',
     color: '#f5f3ff',
-    fields: 8,
-    tag: 'Social'
+    tag: 'Social',
+    fields: [
+      { type: 'text', label: 'Full name', required: true, placeholder: 'Your name' },
+      { type: 'text', label: 'Team name', required: false, placeholder: 'Optional' },
+      { type: 'dropdown', label: 'Attendance type', required: true, options: ['In person', 'Virtual'] },
+      { type: 'url', label: 'Portfolio', required: false, placeholder: 'https://' },
+      { type: 'confirmation', label: 'I agree to the event code of conduct', required: true },
+    ]
   },
   {
     id: 'whitelist',
@@ -61,13 +103,31 @@ const TEMPLATES = [
     description: 'Manage early access and exclusive community drops securely.',
     icon: '🦄',
     color: '#ecfeff',
-    fields: 4,
-    tag: 'DeFi'
+    tag: 'DeFi',
+    fields: [
+      { type: 'text', label: 'Wallet address', required: true, placeholder: '0x...' },
+      { type: 'dropdown', label: 'Tier', required: true, options: ['OG', 'Priority', 'Standard'] },
+      { type: 'url', label: 'Referral link', required: false, placeholder: 'https://' },
+      { type: 'confirmation', label: 'I accept the whitelist terms', required: true },
+    ]
   }
 ];
 
 export default function TemplatesPage() {
   const router = useRouter();
+
+  const handleUseTemplate = (template: Template) => {
+    const draft = {
+      title: template.title,
+      description: template.description,
+      fields: template.fields.map((field) => ({
+        ...field,
+        id: crypto.randomUUID(),
+      })),
+    };
+    localStorage.setItem('walrusform_template_draft', JSON.stringify(draft));
+    router.push(`/builder?template=${template.id}`);
+  };
 
   const container = {
     hidden: { opacity: 0 },
@@ -146,12 +206,12 @@ export default function TemplatesPage() {
                 <div className="flex items-center justify-between mt-auto">
                   <div className="flex items-center gap-2 text-gray-400 font-jakarta font-bold text-[10px] uppercase tracking-widest">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /></svg>
-                    {template.fields} Fields
+                    {template.fields.length} Fields
                   </div>
                   <Button 
                     variant="ghost" 
                     className="!py-2 !px-5 !text-[12px] group-hover:!bg-[#4a2e8c] group-hover:!text-white transition-all"
-                    onClick={() => router.push('/builder')}
+                    onClick={() => handleUseTemplate(template)}
                   >
                     Use This
                   </Button>

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { GlassCard, Button, Input, Badge } from '@/components/ui';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import AppBackground from '@/components/AppBackground';
 import Image from 'next/image';
@@ -21,12 +21,45 @@ const FIELD_TYPES = [
   { id: 'confirmation', label: 'Confirmation', icon: '✓', color: '#e6f0ff' },
 ];
 
+const SEAL_WALLETS_KEY = 'walrusform_seal_wallets';
+
+function getSealWallets(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    return JSON.parse(localStorage.getItem(SEAL_WALLETS_KEY) ?? '[]');
+  } catch {
+    return [];
+  }
+}
+
 export default function BuilderPage() {
-  const [formTitle, setFormTitle] = useState('Untitled Session');
-  const [formDescription, setFormDescription] = useState('');
-  const [fields, setFields] = useState<FormField[]>([]);
-  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
-  const [dropdownOptionsInput, setDropdownOptionsInput] = useState('');
+  const searchParams = useSearchParams();
+
+  const initialDraft = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    const templateId = searchParams.get('template');
+    if (!templateId) return null;
+    const draftRaw = localStorage.getItem('walrusform_template_draft');
+    if (!draftRaw) return null;
+    try {
+      return JSON.parse(draftRaw) as { title: string; description?: string; fields: FormField[] };
+    } catch {
+      return null;
+    } finally {
+      localStorage.removeItem('walrusform_template_draft');
+    }
+  }, [searchParams]);
+
+  const [formTitle, setFormTitle] = useState(() => initialDraft?.title ?? 'Untitled Session');
+  const [formDescription, setFormDescription] = useState(() => initialDraft?.description ?? '');
+  const [fields, setFields] = useState<FormField[]>(() => initialDraft?.fields ?? []);
+  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(
+    () => initialDraft?.fields?.[0]?.id ?? null
+  );
+  const [dropdownOptionsInput, setDropdownOptionsInput] = useState(() => {
+    const first = initialDraft?.fields?.[0];
+    return first?.type === 'dropdown' ? (first.options ?? []).join('\n') : '';
+  });
 
   // Deploy state
   const [isDeploying, setIsDeploying] = useState(false);
@@ -39,7 +72,7 @@ export default function BuilderPage() {
 
   const addField = (type: typeof FIELD_TYPES[0]) => {
     const newField: FormField = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       type: type.id as FormField['type'],
       label: `${type.label} Question`,
       required: false,
@@ -48,14 +81,12 @@ export default function BuilderPage() {
     };
     setFields((prev) => [...prev, newField]);
     setSelectedFieldId(newField.id);
-    if (type.id === 'dropdown') {
-      setDropdownOptionsInput('Option A\nOption B');
-    }
+    setDropdownOptionsInput(type.id === 'dropdown' ? 'Option A\nOption B' : '');
   };
 
   const deleteField = (id: string) => {
     setFields((prev) => prev.filter((f) => f.id !== id));
-    if (selectedFieldId === id) setSelectedFieldId(null);
+    if (selectedFieldId === id) selectField(null);
   };
 
   const updateField = (id: string, patch: Partial<FormField>) => {
@@ -63,6 +94,11 @@ export default function BuilderPage() {
   };
 
   const selectedField = fields.find((f) => f.id === selectedFieldId);
+
+  const selectField = (field: FormField | null) => {
+    setSelectedFieldId(field?.id ?? null);
+    setDropdownOptionsInput(field?.type === 'dropdown' ? (field.options ?? []).join('\n') : '');
+  };
 
   // ── Deploy to Walrus ────────────────────────────────────────────────────────
   const handleDeployToWalrus = async () => {
@@ -78,6 +114,9 @@ export default function BuilderPage() {
 
     setIsDeploying(true);
     try {
+      const sealWallets = getSealWallets();
+      const encryptWithSeal = sealWallets.length > 0;
+
       const formDef: FormDefinition = {
         id: crypto.randomUUID(),
         title: formTitle.trim(),
@@ -86,7 +125,8 @@ export default function BuilderPage() {
         createdAt: new Date().toISOString(),
         settings: {
           requireWallet: false,
-          encryptWithSeal: false,
+          encryptWithSeal,
+          allowedDecryptors: encryptWithSeal ? sealWallets : undefined,
         },
       };
 
@@ -244,7 +284,7 @@ export default function BuilderPage() {
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 20, scale: 0.95 }}
                         className={`group relative glass-card !p-8 flex items-center gap-8 cursor-move transition-all !bg-white/90 !rounded-[40px] border-white shadow-xl ${selectedFieldId === field.id ? 'ring-4 ring-[#cdb4ff]/30 !border-[#cdb4ff]' : 'hover:scale-[1.01]'}`}
-                        onClick={() => setSelectedFieldId(field.id)}
+                        onClick={() => selectField(field)}
                       >
                         <div className="flex flex-col gap-1 text-gray-300 group-hover:text-[#4a2e8c] transition-colors">
                           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">

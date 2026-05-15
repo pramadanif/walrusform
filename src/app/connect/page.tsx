@@ -1,16 +1,17 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { GlassCard, Button } from '@/components/ui';
+import { GlassCard } from '@/components/ui';
 import { useRouter } from 'next/navigation';
 import AppBackground from '@/components/AppBackground';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
+import { ConnectButton, useCurrentAccount } from '@mysten/dapp-kit';
 
 export default function ConnectPage() {
-  const [connecting, setConnecting] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const router = useRouter();
+  const account = useCurrentAccount();
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -23,12 +24,9 @@ export default function ConnectPage() {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  const handleConnect = () => {
-    setConnecting(true);
-    setTimeout(() => {
-      router.push('/onboarding');
-    }, 2000);
-  };
+  useEffect(() => {
+    if (account) router.push('/onboarding');
+  }, [account, router]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 relative overflow-hidden bg-[#e6f0ff]">
@@ -84,15 +82,15 @@ export default function ConnectPage() {
           </p>
 
           <div className="flex flex-col gap-3 w-full relative z-10">
-            <WalletButton name="Sui Wallet" onClick={handleConnect} loading={connecting} delay={0.1} />
-            <WalletButton name="Suiet" onClick={handleConnect} loading={connecting} delay={0.2} />
-            <WalletButton name="Ethos Wallet" onClick={handleConnect} loading={connecting} delay={0.3} />
-          </div>
-
-          <div className="my-10 flex items-center gap-4 w-full opacity-30">
-            <div className="h-[1px] flex-1 bg-black/20"></div>
-            <span className="text-black font-jakarta text-[12px] font-bold">OR</span>
-            <div className="h-[1px] flex-1 bg-black/20"></div>
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.1 }}
+            >
+              <ConnectButton
+                className="!w-full !bg-white/60 !backdrop-blur-md !border !border-white !hover:border-[#cdb4ff] !hover:bg-white !px-6 !py-4 !rounded-[20px] !shadow-sm !font-outfit !font-bold !text-[16px] !text-gray-800"
+              />
+            </motion.div>
           </div>
 
           <button 
@@ -109,28 +107,5 @@ export default function ConnectPage() {
         Built on Walrus Protocol
       </div>
     </div>
-  );
-}
-
-function WalletButton({ name, onClick, loading, delay }: { name: string, onClick: () => void, loading: boolean, delay: number }) {
-  return (
-    <motion.button 
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay }}
-      onClick={onClick}
-      disabled={loading}
-      className="bg-white/60 backdrop-blur-md border border-white hover:border-[#cdb4ff] hover:bg-white p-4.5 flex items-center gap-4 w-full group transition-all rounded-[20px] shadow-sm hover:shadow-md"
-    >
-      <div className="w-10 h-10 flex items-center justify-center bg-[#cdb4ff]/10 rounded-xl text-[#4a2e8c] group-hover:scale-110 transition-transform">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      </div>
-      <span className="flex-1 text-left font-outfit font-bold text-gray-800 text-[16px]">{name}</span>
-      {loading ? (
-        <div className="w-5 h-5 border-2 border-[#4a2e8c] border-t-transparent rounded-full animate-spin"></div>
-      ) : (
-        <svg className="opacity-0 group-hover:opacity-100 translate-x-[-10px] group-hover:translate-x-0 transition-all text-[#4a2e8c]" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      )}
-    </motion.button>
   );
 }

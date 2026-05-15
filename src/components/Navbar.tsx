@@ -1,14 +1,13 @@
 "use client";
 
 import React from 'react';
-import { ConnectButton, useCurrentAccount } from '@mysten/dapp-kit';
+import { ConnectButton } from '@mysten/dapp-kit';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
 
 const Navbar = () => {
-  const account = useCurrentAccount();
   const pathname = usePathname();
   const router = useRouter();
 

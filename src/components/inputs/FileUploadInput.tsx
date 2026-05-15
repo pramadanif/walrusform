@@ -5,7 +5,7 @@ import { uploadToWalrus } from '@/lib/walrus';
 
 interface Props {
   type: 'screenshot' | 'video';
-  onUploadComplete: (blobId: string, file: File) => void;
+  onUploadComplete: (blobId: string) => void;
   onClear?: () => void;
 }
 
@@ -63,7 +63,7 @@ export function FileUploadInput({ type, onUploadComplete, onClear }: Props) {
 
       setProgress(100);
       setBlobId(id);
-      onUploadComplete(id, file);
+      onUploadComplete(id);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Upload failed';
       setError(msg);
