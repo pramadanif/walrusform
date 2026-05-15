@@ -1,26 +1,31 @@
-/**
- * lib/seal.ts — Client-side encryption for Worm form submissions.
- *
- * CURRENT IMPLEMENTATION: WebCrypto AES-GCM-256 with PBKDF2 key derivation.
- * This is REAL cryptographic encryption — not a base64 placeholder.
- *
- * SEAL SDK UPGRADE PATH:
- * The @mysten/seal SDK is installed. To upgrade to full Seal threshold encryption:
- *   1. Deploy a Move package to Sui testnet with a `seal_approve` entry function.
- *   2. Use SealClient from '@mysten/seal' with testnet key server object IDs:
- *      - Mysten testnet-1: 0x73d05d62c18d9374e3ea529e8e0ed6161da1a141a94d3f76ae3fe4e99356db75
- *      - Mysten testnet-2: 0xf5d14a81a982144ae441cd7d64b09027f116a468bd36e7eca494f750591623c8
- *   3. Replace encryptWithSeal / decryptWithSeal below with SealClient.encrypt / .decrypt.
- *
- * WHY NOT USING @mysten/seal YET:
- * The Seal SDK requires a deployed Move package (packageId) on-chain for access control.
- * Without a deployed Move module, SealClient.encrypt() will throw InvalidPackageError.
- * This is an on-chain prerequisite, not an SDK limitation.
- *
- * Ciphertext format: WORM_AES_GCM_V1:<iv_base64>:<ciphertext_base64>
- */
+import { SealClient } from '@mysten/seal';
+import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
+
+const SEAL_KEY_SERVER_OBJECT_ID = "0x73d05d62c18d9374e3ea529e8e0ed6161da1a141a94d3f76ae3fe4e99356db75";
+const SUI_TESTNET_RPC = 'https://fullnode.testnet.sui.io:443';
+
+let sealClientInstance: SealClient | null = null;
+
+function getSealClient() {
+  if (sealClientInstance) return sealClientInstance;
+  const client = new SuiJsonRpcClient({ 
+    url: SUI_TESTNET_RPC,
+    network: 'testnet'
+  });
+  sealClientInstance = new SealClient({
+    suiClient: client as any,
+    serverConfigs: [
+      {
+        objectId: SEAL_KEY_SERVER_OBJECT_ID,
+        weight: 1,
+      }
+    ],
+  });
+  return sealClientInstance;
+}
 
 const CIPHER_PREFIX = 'WORM_AES_GCM_V1';
+const SEAL_PREFIX = 'WORM_SEAL_SDK_V1';
 const KDF_SALT_LABEL = 'worm-aes-gcm-v1';
 
 function normalizeDecryptors(allowedDecryptors: string[]): string {
@@ -85,8 +90,27 @@ async function deriveKey(allowedDecryptors: string[]): Promise<CryptoKey> {
  */
 export async function encryptWithSeal(
   data: string,
-  allowedDecryptors: string[]
+  allowedDecryptors: string[],
+  formObjectId?: string
 ): Promise<string> {
+  // 1. Try REAL SEAL SDK Threshold Encryption if formObjectId is provided
+  if (formObjectId) {
+    try {
+      const seal = getSealClient();
+      const encoder = new TextEncoder();
+      const { encryptedObject } = await seal.encrypt({
+        threshold: 1,
+        packageId: "0x624805e8d931a770ebc5426a72797fc74b7f100cfb0083d67d77d48558fa5e83", // WORM package
+        id: formObjectId, // Using form ID as the identity namespace
+        data: encoder.encode(data),
+      });
+      return `${SEAL_PREFIX}:${toBase64(encryptedObject)}`;
+    } catch (e) {
+      console.warn('[Worm Seal] SDK Encryption failed, falling back to AES-GCM:', e);
+    }
+  }
+
+  // 2. Fallback to AES-GCM
   const key = await deriveKey(allowedDecryptors);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encoder = new TextEncoder();
@@ -99,16 +123,35 @@ export async function encryptWithSeal(
 }
 
 /**
- * Decrypt a ciphertext string produced by encryptWithSeal.
- * walletAddress (optional): if provided, access is checked against allowedDecryptors.
+ * Decrypt a ciphertext string. Supports both Seal SDK and AES-GCM fallback.
  */
 export async function decryptWithSeal(
   ciphertext: string,
   allowedDecryptors: string[],
-  walletAddress?: string
+  walletAddress?: string,
+  txBytes?: Uint8Array
 ): Promise<string> {
+  // 1. Check for Seal SDK prefix
+  if (ciphertext.startsWith(`${SEAL_PREFIX}:`)) {
+    if (!txBytes) {
+      throw new Error('[Worm Seal] Threshold decryption requires the approval transaction bytes (txBytes).');
+    }
+    const seal = getSealClient();
+    const data = fromBase64(ciphertext.split(':')[1]);
+    
+    // We need a session key for decryption in the SDK
+    // In a real app, this would be generated once per session
+    const decrypted = await seal.decrypt({
+      data,
+      sessionKey: (window as any).worm_seal_session, // Placeholder for session management
+      txBytes,
+    });
+    return new TextDecoder().decode(decrypted);
+  }
+
+  // 2. Standard AES-GCM Decryption
   if (!ciphertext.startsWith(`${CIPHER_PREFIX}:`)) {
-    throw new Error('[Worm Seal] Unsupported ciphertext format. Expected WORM_AES_GCM_V1 prefix.');
+    throw new Error('[Worm Seal] Unsupported ciphertext format.');
   }
 
   if (walletAddress) {
@@ -139,5 +182,5 @@ export async function decryptWithSeal(
  * Returns true if a string looks like a Worm-encrypted ciphertext.
  */
 export function isSealEncrypted(value: string): boolean {
-  return typeof value === 'string' && value.startsWith(`${CIPHER_PREFIX}:`);
+  return typeof value === 'string' && (value.startsWith(`${CIPHER_PREFIX}:`) || value.startsWith(`${SEAL_PREFIX}:`));
 }

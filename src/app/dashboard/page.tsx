@@ -41,7 +41,7 @@ export default function DashboardPage() {
     const loadAll = async () => {
       setLoadingResponses(true);
       try {
-        const registry = await getFormRegistry();
+        const registry = await getFormRegistry(account?.address);
         const formIds = Object.keys(registry);
 
         if (formIds.length === 0) {

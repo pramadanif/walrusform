@@ -42,7 +42,7 @@ export default function ResponseDetailPage({ params }: PageProps) {
       try {
         // blobId could be either a submission blob or a sub ID.
         // Strategy: scan all forms in registry, find the submission with matching _blobId
-        const registry = await getFormRegistry();
+        const registry = await getFormRegistry(account?.address);
         const formIds = Object.keys(registry);
 
         let found: Submission | null = null;

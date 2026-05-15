@@ -22,6 +22,7 @@
 
 import { uploadToWalrus, readFromWalrus } from './walrus';
 import { FormRegistryEntry } from './formStorage';
+import { getOwnedForms, getFormByBlobId } from './suiActions';
 
 // localStorage key: pointer to the latest registry blob for this wallet
 const REGISTRY_POINTER_KEY = 'worm_registry_blob_pointer';
@@ -86,18 +87,18 @@ export async function appendToWalrusRegistry(entry: WalrusRegistryEntry): Promis
 }
 
 /**
- * Get a merged view: Walrus registry entries + any localStorage-only entries
- * (for backward compat with forms deployed before WalrusRegistry was added).
+ * Get a merged view: Sui on-chain forms + Walrus registry entries + any localStorage-only entries.
+ * walletAddress: if provided, we query Sui for forms registered on-chain.
  */
-export async function getMergedRegistry(): Promise<Record<string, FormRegistryEntry>> {
-  // Load localStorage registry (backward compat)
+export async function getMergedRegistry(walletAddress?: string): Promise<Record<string, FormRegistryEntry>> {
+  // 1. Load localStorage registry (backward compat)
   const LOCAL_KEY = 'walrusform_registry';
   let localRegistry: Record<string, FormRegistryEntry> = {};
   try {
     localRegistry = JSON.parse(localStorage.getItem(LOCAL_KEY) ?? '{}');
   } catch { /* ignore */ }
 
-  // Load Walrus registry
+  // 2. Load Walrus index blobs registry
   const walrusEntries = await loadWalrusRegistry();
   const walrusRegistry: Record<string, FormRegistryEntry> = {};
   for (const entry of walrusEntries) {
@@ -108,8 +109,27 @@ export async function getMergedRegistry(): Promise<Record<string, FormRegistryEn
     };
   }
 
-  // Walrus entries take precedence
-  return { ...localRegistry, ...walrusRegistry };
+  // 3. Load from Sui blockchain (Discovery Tier)
+  const suiRegistry: Record<string, FormRegistryEntry> = {};
+  if (walletAddress) {
+    try {
+      const ownedForms = await getOwnedForms(walletAddress);
+      for (const form of ownedForms) {
+        if (form.formBlobId) {
+          suiRegistry[form.formBlobId] = {
+            title: form.title || "On-chain Form",
+            createdAt: new Date().toISOString(), // Sui objects don't show creation date easily without extra RPC calls
+            blobId: form.formBlobId,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('[WalrusRegistry] Failed to query Sui registry:', e);
+    }
+  }
+
+  // Precedence: Sui > Walrus > localStorage
+  return { ...localRegistry, ...walrusRegistry, ...suiRegistry };
 }
 
 // ─── Submission Index Blobs ───────────────────────────────────────────────────
@@ -131,13 +151,26 @@ export interface SubmissionIndexEntry {
  * Falls back to the old localStorage index for backward compat.
  */
 export async function loadSubmissionIndex(formBlobId: string): Promise<SubmissionIndexEntry[]> {
+  // 1. Try to find the latest index pointer from Sui (Decentralized SOT)
+  try {
+    const suiForm = await getFormByBlobId(formBlobId);
+    const suiPointer = suiForm?.latestSubmissionIndexBlobId;
+    if (suiPointer) {
+        const raw = await readFromWalrus(suiPointer);
+        return JSON.parse(raw) as SubmissionIndexEntry[];
+    }
+  } catch (e) {
+    console.warn('[WalrusRegistry] Failed to load index from Sui:', e);
+  }
+
+  // 2. Fallback to local pointer (for forms not yet on Sui or if RPC fails)
   const pointer = localStorage.getItem(subIndexPointerKey(formBlobId));
   if (pointer) {
     try {
       const raw = await readFromWalrus(pointer);
       return JSON.parse(raw) as SubmissionIndexEntry[];
     } catch {
-      console.warn('[WalrusRegistry] Submission index blob unavailable, falling back to localStorage.');
+      console.warn('[WalrusRegistry] Submission index blob unavailable, falling back to legacy.');
     }
   }
 

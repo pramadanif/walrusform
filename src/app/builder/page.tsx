@@ -7,8 +7,10 @@ import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import AppBackground from '@/components/AppBackground';
 import Image from 'next/image';
 import Navbar from '@/components/Navbar';
-import { saveFormDefinition, FormDefinition, FormField } from '@/lib/formStorage';
+import { saveFormDefinition, FormDefinition, FormField, getSealWallets } from '@/lib/formStorage';
 import { getExplorerUrl } from '@/lib/walrus';
+import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { createFormTx } from '@/lib/suiActions';
 
 const FIELD_TYPES = [
   { id: 'richtext', label: 'Rich Text', icon: 'T', color: '#cdb4ff' },
@@ -21,18 +23,10 @@ const FIELD_TYPES = [
   { id: 'confirmation', label: 'Confirmation', icon: '✓', color: '#e6f0ff' },
 ];
 
-const SEAL_WALLETS_KEY = 'walrusform_seal_wallets';
-
-function getSealWallets(): string[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    return JSON.parse(localStorage.getItem(SEAL_WALLETS_KEY) ?? '[]');
-  } catch {
-    return [];
-  }
-}
+// Using getSealWallets from @/lib/formStorage
 
 export default function BuilderPage() {
+  const account = useCurrentAccount();
   const searchParams = useSearchParams();
 
   const initialDraft = useMemo(() => {
@@ -63,6 +57,8 @@ export default function BuilderPage() {
 
   // Deploy state
   const [isDeploying, setIsDeploying] = useState(false);
+  const [deployStage, setDeployStage] = useState<'walrus' | 'sui' | 'done'>('walrus');
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const [deployError, setDeployError] = useState<string | null>(null);
   const [deployedBlobId, setDeployedBlobId] = useState<string | null>(null);
   const [shareableLink, setShareableLink] = useState<string | null>(null);
@@ -113,6 +109,7 @@ export default function BuilderPage() {
     }
 
     setIsDeploying(true);
+    setDeployStage('walrus');
     try {
       const sealWallets = getSealWallets();
       const encryptWithSeal = sealWallets.length > 0;
@@ -130,10 +127,28 @@ export default function BuilderPage() {
         },
       };
 
+      // 1. Save to Walrus (and its index)
       const blobId = await saveFormDefinition(formDef);
+      
+      // 2. Register on Sui
+      if (account?.address) {
+        setDeployStage('sui');
+        const tx = createFormTx(formDef.title, blobId, ""); // empty index for new form
+        await new Promise((resolve, reject) => {
+          signAndExecute(
+            { transaction: tx },
+            {
+              onSuccess: () => resolve(true),
+              onError: (err) => reject(new Error(`Sui Registration Failed: ${err.message}`)),
+            }
+          );
+        });
+      }
+
       const link = `${window.location.origin}/form/${blobId}`;
       setDeployedBlobId(blobId);
       setShareableLink(link);
+      setDeployStage('done');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Deployment failed';
       setDeployError(msg);
@@ -199,7 +214,9 @@ export default function BuilderPage() {
               className="!px-10 !py-4 !text-sm shadow-[0_20px_40px_-10px_rgba(74,46,140,0.3)]"
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L3 7V17L12 22L21 17V7L12 2Z" /><path d="M12 22V12" /><path d="M21 7l-9 5-9-5" /></svg>}
             >
-              {deployedBlobId ? 'Update Session' : 'Deploy to Walrus'}
+              {isDeploying 
+                ? (deployStage === 'walrus' ? 'Storing…' : 'Registering…') 
+                : (deployedBlobId ? 'Update Session' : 'Deploy to Walrus')}
             </Button>
           </motion.div>
         </header>
