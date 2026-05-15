@@ -97,7 +97,7 @@ export const Input = ({
   </div>
 );
 
-export const Badge = ({ children, color = "purple" }: { children: React.ReactNode, color?: "purple" | "blue" | "green" | "red" | "gray" }) => {
+export const Badge = ({ children, color = "purple", className = "" }: { children: React.ReactNode, color?: "purple" | "blue" | "green" | "red" | "gray", className?: string }) => {
   const colors = {
     purple: "bg-[#cdb4ff]/20 text-[#4a2e8c] border-[#cdb4ff]/30",
     blue: "bg-blue-50 text-blue-600 border-blue-100",
@@ -107,7 +107,7 @@ export const Badge = ({ children, color = "purple" }: { children: React.ReactNod
   };
 
   return (
-    <span className={`px-3 py-1 rounded-full border font-jakarta font-bold text-[9px] uppercase tracking-widest ${colors[color]}`}>
+    <span className={`px-3 py-1 rounded-full border font-jakarta font-bold text-[9px] uppercase tracking-widest ${colors[color]} ${className}`}>
       {children}
     </span>
   );

@@ -3,6 +3,7 @@
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
 import InfoSection from "@/components/InfoSection";
+import FeaturesSection from "@/components/FeaturesSection";
 import Footer from "@/components/Footer";
 import AppBackground from "@/components/AppBackground";
 
@@ -13,6 +14,7 @@ export default function Home() {
       <Navbar />
       <Hero />
       <InfoSection />
+      <FeaturesSection />
       <Footer />
     </div>
   );

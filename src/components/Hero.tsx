@@ -72,11 +72,25 @@ const Hero = () => {
           {headingWords.map((word, i) => (
             <motion.span 
               key={i} 
-              initial={{ y: 80, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: i * 0.1, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+              className="inline-block flex"
             >
-              {word}
+              {word.split("").map((char, j) => (
+                <motion.span
+                  key={j}
+                  initial={{ y: 100, rotateX: -90, opacity: 0 }}
+                  animate={{ y: 0, rotateX: 0, opacity: 1 }}
+                  transition={{ 
+                    delay: i * 0.2 + j * 0.05, 
+                    duration: 1, 
+                    type: "spring",
+                    stiffness: 100,
+                    damping: 20
+                  }}
+                  className="inline-block origin-bottom"
+                >
+                  {char}
+                </motion.span>
+              ))}
             </motion.span>
           ))}
         </h1>

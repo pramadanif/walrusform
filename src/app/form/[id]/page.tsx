@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, use } from 'react';
 import { GlassCard, Button, Badge } from '@/components/ui';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import AppBackground from '@/components/AppBackground';
 import { loadFormDefinition, FormDefinition } from '@/lib/formStorage';
@@ -137,7 +138,9 @@ export default function PublicFormPage({ params }: PageProps) {
         >
           <div className="flex justify-between items-start mb-10">
             <div className="flex-1 pr-8">
-              <Badge color="purple" className="mb-4">Live Session</Badge>
+              <div className="mb-4">
+                <Badge color="purple">Live Session</Badge>
+              </div>
               <h1 className="text-5xl md:text-6xl font-syne font-extrabold mb-4 text-black tracking-tight leading-tight">{formDef.title}</h1>
               {formDef.description && (
                 <p className="text-gray-500 font-jakarta font-medium text-lg leading-relaxed">{formDef.description}</p>
@@ -395,7 +398,7 @@ function SuccessState({ blobId }: { blobId: string }) {
             </div>
           </div>
           <div className="absolute -bottom-12 -right-12 w-32 h-32 opacity-10 group-hover:scale-110 transition-transform duration-1000">
-            <Image src="/alkimi-hero.avif" alt="Mascot" fill className="object-contain" />
+            <Image src="/form.png" alt="Mascot" fill className="object-contain" />
           </div>
         </GlassCard>
         
