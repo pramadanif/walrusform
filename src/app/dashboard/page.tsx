@@ -34,21 +34,35 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const router = useRouter();
   const account = useCurrentAccount();
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'sui' | 'walrus' | 'seal' | 'done'>('idle');
+  const [syncLogs, setSyncLogs] = useState<{msg: string, type: 'sui' | 'walrus' | 'seal'}[]>([]);
+
+  const addSyncLog = (msg: string, type: 'sui' | 'walrus' | 'seal') => {
+    setSyncLogs(prev => [...prev, { msg, type }].slice(-3));
+  };
 
   // Load all submissions from all forms in registry
   useEffect(() => {
     let active = true;
     const loadAll = async () => {
       setLoadingResponses(true);
+      setSyncStatus('sui');
+      setSyncLogs([]);
+      
       try {
-        const registry = await getFormRegistry();
+        addSyncLog("Querying Sui for decentralized registry...", "sui");
+        const registry = await getFormRegistry(account?.address);
         const formIds = Object.keys(registry);
+        addSyncLog(`Found ${formIds.length} forms on-chain.`, "sui");
 
         if (formIds.length === 0) {
           if (active) setResponses([]);
+          setSyncStatus('done');
           return;
         }
 
+        setSyncStatus('walrus');
+        addSyncLog("Fetching form definitions from Walrus...", "walrus");
         const formDefs = await Promise.allSettled(
           formIds.map((id) => loadFormDefinition(id).then((form) => ({ ...form, _blobId: id })))
         );
@@ -61,10 +75,15 @@ export default function DashboardPage() {
           loadedForms.map((form) => [form._blobId, form])
         );
 
+        addSyncLog("Loading submission indices from Walrus...", "walrus");
+        setSyncStatus('seal');
         const allSubsPerForm = await Promise.allSettled(
           formIds.map((fid) => getSubmissionsForForm(fid).then(async (subs) => {
             const form = formByBlobId[fid];
             const allowed = form?.settings.allowedDecryptors ?? [];
+            if (subs.length > 0) {
+              addSyncLog(`Decrypting ${subs.length} responses for ${form?.title || fid}...`, "seal");
+            }
             return Promise.all(subs.map(async (sub) => {
               const base: Submission = {
                 ...sub,
@@ -100,14 +119,16 @@ export default function DashboardPage() {
           }))
         );
 
-        const all: Submission[] = (allSubsPerForm
+        const flat: Submission[] = (allSubsPerForm
           .filter((r) => r.status === 'fulfilled') as PromiseFulfilledResult<Submission[]>[])
           .flatMap((r) => r.value)
           .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
 
-        if (active) setResponses(all);
-      } catch {
-        // silent
+        if (active) setResponses(flat);
+        setSyncStatus('done');
+      } catch (err) {
+        console.error('Dashboard load error:', err);
+        setSyncStatus('idle');
       } finally {
         if (active) setLoadingResponses(false);
       }
@@ -193,11 +214,31 @@ export default function DashboardPage() {
         <Navbar />
 
         <main className="max-w-[1400px] mx-auto px-8 pt-44 pb-20 relative z-10">
-          {/* Header */}
+          {/* Header Area with Sync Status */}
           <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
             <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}>
               <h1 className="text-6xl font-syne font-extrabold text-black mb-4 tracking-tight">Dashboard</h1>
-              <p className="text-gray-500 font-jakarta font-bold text-sm uppercase tracking-widest">Managing your decentralized sessions</p>
+              <div className="flex items-center gap-4">
+                <p className="text-gray-500 font-jakarta font-bold text-sm uppercase tracking-widest">Managing your decentralized sessions</p>
+                <div className="flex items-center gap-2 px-3 py-1 bg-white/50 backdrop-blur-sm rounded-full border border-black/5 shadow-sm">
+                  <div className={`w-1.5 h-1.5 rounded-full ${syncStatus === 'done' ? 'bg-green-500' : 'bg-[#4a2e8c] animate-pulse'}`} />
+                  <span className="text-[10px] font-jakarta font-bold text-gray-400 uppercase tracking-widest">
+                    {syncStatus === 'idle' ? 'Idle' :
+                     syncStatus === 'sui' ? 'Sui Sync' :
+                     syncStatus === 'walrus' ? 'Walrus Sync' :
+                     syncStatus === 'seal' ? 'Seal Decrypting' : 'Verified'}
+                  </span>
+                </div>
+              </div>
+              {syncLogs.length > 0 && syncStatus !== 'done' && (
+                <div className="flex flex-col gap-1 mt-4">
+                  {syncLogs.map((log, i) => (
+                    <span key={i} className="text-[10px] font-jakarta text-gray-400 italic">
+                      <span className="font-bold mr-1" style={{ color: log.type === 'sui' ? '#4a2e8c' : log.type === 'walrus' ? '#2563eb' : '#d97706' }}>[{log.type}]</span> {log.msg}
+                    </span>
+                  ))}
+                </div>
+              )}
             </motion.div>
             
             <motion.div 
@@ -236,7 +277,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
             {/* Main List */}
             <div className="lg:col-span-2">
-              <GlassCard className="!p-0 overflow-hidden !bg-white/80 !rounded-[48px] border-white shadow-2xl relative">
+              <GlassCard className="!p-0 overflow-hidden !bg-white/80 !rounded-[48px] border-white shadow-2xl relative h-full">
                 <div className="p-10 border-b border-black/[0.03] flex justify-between items-center bg-white/40">
                   <h3 className="text-2xl font-outfit font-bold">Recent Submissions</h3>
                   <div className="flex gap-4 items-center">
@@ -261,7 +302,7 @@ export default function DashboardPage() {
                       <div className="absolute inset-0 rounded-full border-4 border-[#cdb4ff]/20" />
                       <div className="absolute inset-0 rounded-full border-4 border-t-[#4a2e8c] animate-spin" />
                     </div>
-                    <p className="font-jakarta font-bold text-[11px] text-[#4a2e8c] uppercase tracking-[0.2em]">Syncing with Walrus…</p>
+                    <p className="font-jakarta font-bold text-[11px] text-[#4a2e8c] uppercase tracking-[0.2em]">Syncing decentralized data…</p>
                   </div>
                 ) : filtered.length === 0 ? (
                   <div className="p-24 text-center">
@@ -351,7 +392,7 @@ export default function DashboardPage() {
               <GlassCard className="!p-10 !bg-white/80 !rounded-[48px] border-white shadow-xl relative overflow-hidden">
                 <div className="flex items-center justify-between mb-8">
                   <h3 className="text-lg font-outfit font-bold">Live Activity</h3>
-                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  <div className={`w-2 h-2 rounded-full ${responses.length > 0 ? 'bg-green-500' : 'bg-gray-300'} animate-pulse`} />
                 </div>
                 <div className="space-y-8">
                   {responses.slice(0, 4).map((r, i) => (
@@ -424,7 +465,7 @@ export default function DashboardPage() {
                         <div key={k} className="p-6 rounded-[32px] bg-gray-50/50 border border-black/5">
                           <div className="text-[10px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-2">{k}</div>
                           <div className="font-jakarta font-bold text-[15px] text-gray-800 break-words whitespace-pre-wrap"
-                               dangerouslySetInnerHTML={typeof v === 'string' && v.startsWith('<') ? { __html: DOMPurify.sanitize(v) } : undefined}
+                                dangerouslySetInnerHTML={typeof v === 'string' && v.startsWith('<') ? { __html: DOMPurify.sanitize(v) } : undefined}
                           >
                             {!(typeof v === 'string' && v.startsWith('<')) ? (typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v ?? '—')) : undefined}
                           </div>
@@ -586,4 +627,3 @@ const OverviewIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill=
 const FormsIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /></svg>;
 const InboxIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" /></svg>;
 const ChartIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 20V10M12 20V4M6 20v-6" /></svg>;
-

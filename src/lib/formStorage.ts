@@ -1,5 +1,5 @@
 import { uploadToWalrus, readFromWalrus } from './walrus';
-import { appendToWalrusRegistry, getMergedRegistry } from './walrusRegistry';
+import { appendToWalrusRegistry, getMergedRegistry, loadSubmissionIndex } from './walrusRegistry';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,13 +61,24 @@ function saveLocalFormRegistry(registry: Record<string, FormRegistryEntry>) {
   localStorage.setItem(LOCAL_REGISTRY_KEY, JSON.stringify(registry));
 }
 
+const SEAL_WALLETS_KEY = 'walrusform_seal_wallets';
+
+export function getSealWallets(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    return JSON.parse(localStorage.getItem(SEAL_WALLETS_KEY) ?? '[]');
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Get the full merged registry (Walrus blobs + localStorage legacy entries).
  * Prefers Walrus entries on conflict.
  */
-export async function getFormRegistry(): Promise<Record<string, FormRegistryEntry>> {
+export async function getFormRegistry(walletAddress?: string): Promise<Record<string, FormRegistryEntry>> {
   try {
-    return await getMergedRegistry();
+    return await getMergedRegistry(walletAddress);
   } catch {
     // Fallback to local-only if Walrus is unreachable
     return getLocalFormRegistry();

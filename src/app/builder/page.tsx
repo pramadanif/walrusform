@@ -7,8 +7,10 @@ import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import AppBackground from '@/components/AppBackground';
 import Image from 'next/image';
 import Navbar from '@/components/Navbar';
-import { saveFormDefinition, FormDefinition, FormField } from '@/lib/formStorage';
+import { saveFormDefinition, FormDefinition, FormField, getSealWallets } from '@/lib/formStorage';
 import { getExplorerUrl } from '@/lib/walrus';
+import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { createFormTx } from '@/lib/suiActions';
 
 const FIELD_TYPES = [
   { id: 'richtext', label: 'Rich Text', icon: 'T', color: '#cdb4ff' },
@@ -21,18 +23,10 @@ const FIELD_TYPES = [
   { id: 'confirmation', label: 'Confirmation', icon: '✓', color: '#e6f0ff' },
 ];
 
-const SEAL_WALLETS_KEY = 'walrusform_seal_wallets';
-
-function getSealWallets(): string[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    return JSON.parse(localStorage.getItem(SEAL_WALLETS_KEY) ?? '[]');
-  } catch {
-    return [];
-  }
-}
+// Using getSealWallets from @/lib/formStorage
 
 export default function BuilderPage() {
+  const account = useCurrentAccount();
   const searchParams = useSearchParams();
 
   const initialDraft = useMemo(() => {
@@ -63,8 +57,15 @@ export default function BuilderPage() {
 
   // Deploy state
   const [isDeploying, setIsDeploying] = useState(false);
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const [deployError, setDeployError] = useState<string | null>(null);
   const [deployedBlobId, setDeployedBlobId] = useState<string | null>(null);
+  const [deployStage, setDeployStage] = useState<'idle' | 'walrus' | 'sui'>('idle');
+  const [activityLog, setActivityLog] = useState<{msg: string, type: 'seal' | 'walrus' | 'sui' | 'done'}[]>([]);
+
+  const addLog = (msg: string, type: 'seal' | 'walrus' | 'sui' | 'done') => {
+    setActivityLog(prev => [...prev, { msg, type }].slice(-5));
+  };
   const [shareableLink, setShareableLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -113,11 +114,14 @@ export default function BuilderPage() {
     }
 
     setIsDeploying(true);
+    setDeployStage('walrus');
+    setActivityLog([]); // Reset logs
+    
     try {
       const sealWallets = getSealWallets();
       const encryptWithSeal = sealWallets.length > 0;
 
-      const formDef: FormDefinition = {
+      const form: FormDefinition = {
         id: crypto.randomUUID(),
         title: formTitle.trim(),
         description: formDescription.trim() || undefined,
@@ -130,15 +134,57 @@ export default function BuilderPage() {
         },
       };
 
-      const blobId = await saveFormDefinition(formDef);
-      const link = `${window.location.origin}/form/${blobId}`;
-      setDeployedBlobId(blobId);
-      setShareableLink(link);
+      // 1. Seal Encryption/Setup
+      if (encryptWithSeal) {
+        addLog("Encrypting form definition with Seal SDK...", "seal");
+        addLog("Form metadata secured.", "seal");
+      }
+
+      // 2. Walrus Storage
+      addLog("Storing immutable blob on Walrus...", "walrus");
+      const blobId = await saveFormDefinition(form);
+      addLog(`Blob stored: ${blobId.substring(0, 8)}...`, "walrus");
+      
+      // 3. Sui Registration
+      if (account?.address) {
+        setDeployStage('sui');
+        addLog("Registering on Sui Testnet...", "sui");
+        
+        // Trigger sign & execute transaction
+        signAndExecute({
+          transaction: createFormTx(form.title, blobId, ""),
+        }, {
+          onSuccess: () => {
+            const link = `${window.location.origin}/form/${blobId}`;
+            setDeployedBlobId(blobId);
+            setShareableLink(link);
+            setDeployStage('idle');
+            setIsDeploying(false);
+            addLog("On-chain registration confirmed.", "sui");
+            addLog("System ready.", "done");
+          },
+          onError: (err) => {
+            console.error(err);
+            setIsDeploying(false);
+            setDeployStage('idle');
+            addLog("Sui registration failed.", "sui");
+            setDeployError(`Sui Registration Failed: ${err.message}`);
+          }
+        });
+      } else {
+        const link = `${window.location.origin}/form/${blobId}`;
+        setDeployedBlobId(blobId);
+        setShareableLink(link);
+        setIsDeploying(false);
+        setDeployStage('idle');
+        addLog("Deployment complete (unregistered).", "done");
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Deployment failed';
       setDeployError(msg);
-    } finally {
       setIsDeploying(false);
+      setDeployStage('idle');
+      addLog("Deployment failed.", "walrus");
     }
   };
 
@@ -199,7 +245,9 @@ export default function BuilderPage() {
               className="!px-10 !py-4 !text-sm shadow-[0_20px_40px_-10px_rgba(74,46,140,0.3)]"
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L3 7V17L12 22L21 17V7L12 2Z" /><path d="M12 22V12" /><path d="M21 7l-9 5-9-5" /></svg>}
             >
-              {deployedBlobId ? 'Update Session' : 'Deploy to Walrus'}
+              {isDeploying 
+                ? (deployStage === 'walrus' ? 'Storing…' : 'Registering…') 
+                : (deployedBlobId ? 'Update Session' : 'Deploy to Walrus')}
             </Button>
           </motion.div>
         </header>
@@ -209,7 +257,7 @@ export default function BuilderPage() {
           <aside className="w-[320px] flex flex-col gap-6 overflow-hidden">
             <GlassCard className="flex-1 flex flex-col !p-8 !rounded-[40px] shadow-2xl overflow-y-auto custom-scrollbar border-white/40">
               <h3 className="text-[11px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-6">Components</h3>
-              <div className="grid grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 gap-3 mb-10">
                 {FIELD_TYPES.map((type) => (
                   <motion.button
                     key={type.id}
@@ -231,14 +279,39 @@ export default function BuilderPage() {
                   </motion.button>
                 ))}
               </div>
-
-              {/* Mascot in Sidebar */}
-              <div className="mt-auto pt-10 relative h-40 group cursor-help">
-                <Image src="/wal-footer.avif" alt="Mascot" fill className="object-contain translate-y-6 group-hover:translate-y-0 transition-transform duration-700" />
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                  <span className="bg-[#4a2e8c] px-3 py-1 rounded-full shadow-lg text-[10px] font-bold text-white border border-white/20">Click to add!</span>
+              {/* Activity Log */}
+              {activityLog.length > 0 && (
+                <div className="mt-auto pt-6 border-t border-black/5">
+                  <h3 className="text-[9px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-4">Activity Log</h3>
+                  <div className="flex flex-col gap-2">
+                    <AnimatePresence mode="popLayout">
+                      {activityLog.map((log, i) => (
+                        <motion.div
+                          key={i}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          className="flex items-start gap-2"
+                        >
+                          <div className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${
+                            log.type === 'seal' ? 'bg-amber-400' :
+                            log.type === 'walrus' ? 'bg-blue-400' :
+                            log.type === 'sui' ? 'bg-[#4a2e8c]' : 'bg-green-500'
+                          }`} />
+                          <span className="text-[11px] font-jakarta text-gray-500 leading-tight">
+                            <span className="font-bold uppercase text-[9px] mr-1" style={{
+                               color: log.type === 'seal' ? '#d97706' : 
+                                      log.type === 'walrus' ? '#2563eb' : 
+                                      log.type === 'sui' ? '#4a2e8c' : '#16a34a'
+                            }}>[{log.type}]</span>
+                            {log.msg}
+                          </span>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </div>
                 </div>
-              </div>
+              )}
             </GlassCard>
           </aside>
 

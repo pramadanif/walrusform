@@ -94,7 +94,12 @@ export default function PublicFormPage({ params }: PageProps) {
         mediaToSubmit,
         account?.address,
         { encrypted },
-        (stage) => setSubmitStage(stage)
+        (stage) => {
+            if (stage === 'encrypting') setSubmitStage('Seal: Securing your feedback...');
+            else if (stage === 'storing') setSubmitStage('Walrus: Storing immutable blob...');
+            else if (stage === 'indexing') setSubmitStage('Walrus: Updating session index...');
+            else setSubmitStage(stage);
+        }
       );
       setSubmittedBlobId(submissionBlobId);
     } catch (err: unknown) {
@@ -330,7 +335,7 @@ export default function PublicFormPage({ params }: PageProps) {
             icon={!submitting && <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 12h14M12 5l7 7-7 7"/></svg>}
           >
             {submitting 
-              ? (submitStage === 'preparing' ? 'Preparing…' : submitStage === 'uploading' ? 'Uploading…' : submitStage === 'indexing' ? 'Indexing…' : 'Recording…') 
+              ? (submitStage || 'Sending…') 
               : 'Submit Session'}
           </Button>
         </form>
