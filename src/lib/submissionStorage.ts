@@ -45,7 +45,7 @@ export function saveAdminMeta(submissionBlobId: string, meta: AdminMeta): void {
 
 // ─── Core API ────────────────────────────────────────────────────────────────
 
-export type UploadStage = 'preparing' | 'uploading' | 'indexing' | 'finalized';
+export type UploadStage = 'preparing' | 'encrypting' | 'storing' | 'indexing' | 'finalized';
 
 /**
  * Upload a form submission (and any media files) to Walrus.
@@ -75,7 +75,7 @@ export async function submitForm(
     encrypted: options?.encrypted ?? false,
   };
 
-  onStageChange?.('uploading');
+  onStageChange?.('storing');
 
   // Upload submission JSON to Walrus
   const { blobId } = await uploadToWalrus(JSON.stringify(submission), {
