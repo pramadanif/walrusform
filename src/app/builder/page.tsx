@@ -8,9 +8,9 @@ import AppBackground from '@/components/AppBackground';
 import Image from 'next/image';
 import Navbar from '@/components/Navbar';
 import { saveFormDefinition, FormDefinition, FormField, getSealWallets } from '@/lib/formStorage';
-import { getExplorerUrl } from '@/lib/walrus';
+import { getExplorerUrl, uploadToWalrus } from '@/lib/walrus';
 import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
-import { createFormTx } from '@/lib/suiActions';
+import { createFormTx, sealApproveTx } from '@/lib/suiActions';
 
 const FIELD_TYPES = [
   { id: 'richtext', label: 'Rich Text', icon: 'T', color: '#cdb4ff' },
@@ -62,6 +62,31 @@ export default function BuilderPage() {
   const [deployedBlobId, setDeployedBlobId] = useState<string | null>(null);
   const [deployStage, setDeployStage] = useState<'idle' | 'walrus' | 'sui'>('idle');
   const [activityLog, setActivityLog] = useState<{msg: string, type: 'seal' | 'walrus' | 'sui' | 'done'}[]>([]);
+  const [sealEnabled, setSealEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try { return JSON.parse(localStorage.getItem('walrusform_seal_wallets') ?? '[]').length > 0; } catch { return false; }
+  });
+  const [sealWalletInput, setSealWalletInput] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    try { return (JSON.parse(localStorage.getItem('walrusform_seal_wallets') ?? '[]') as string[]).join('\n'); } catch { return ''; }
+  });
+
+  const toggleSeal = (val: boolean) => {
+    setSealEnabled(val);
+    if (!val) {
+      localStorage.setItem('walrusform_seal_wallets', '[]');
+    } else {
+      // Save current wallet input if any
+      const wallets = sealWalletInput.split('\n').map(w => w.trim()).filter(Boolean);
+      localStorage.setItem('walrusform_seal_wallets', JSON.stringify(wallets));
+    }
+  };
+
+  const saveSealWallets = (raw: string) => {
+    setSealWalletInput(raw);
+    const wallets = raw.split('\n').map(w => w.trim()).filter(Boolean);
+    localStorage.setItem('walrusform_seal_wallets', JSON.stringify(wallets));
+  };
 
   const addLog = (msg: string, type: 'seal' | 'walrus' | 'sui' | 'done') => {
     setActivityLog(prev => [...prev, { msg, type }].slice(-5));
@@ -150,18 +175,47 @@ export default function BuilderPage() {
         setDeployStage('sui');
         addLog("Registering on Sui Testnet...", "sui");
         
-        // Trigger sign & execute transaction
+        // Build the allowed decryptors list from current UI state
+        const decryptorList = sealWalletInput.split('\n').map(w => w.trim()).filter(Boolean);
+        
         signAndExecute({
           transaction: createFormTx(form.title, blobId, ""),
         }, {
-          onSuccess: () => {
+          onSuccess: (result) => {
+            // Extract the formObjectId from the created objects
+            const createdObj = (result as any).objectChanges?.find(
+              (o: any) => o.type === 'created' && o.objectType?.includes('::worm::Form')
+            );
+            const formObjectId: string | undefined = createdObj?.objectId;
+
             const link = `${window.location.origin}/form/${blobId}`;
             setDeployedBlobId(blobId);
             setShareableLink(link);
-            setDeployStage('idle');
-            setIsDeploying(false);
             addLog("On-chain registration confirmed.", "sui");
-            addLog("System ready.", "done");
+
+            // If Seal is enabled, register the access policy on-chain
+            if (sealEnabled && decryptorList.length > 0 && formObjectId) {
+              addLog(`Registering Seal policy for ${decryptorList.length} decryptor(s)...`, "seal");
+              signAndExecute({
+                transaction: sealApproveTx(formObjectId, decryptorList),
+              }, {
+                onSuccess: () => {
+                  addLog("Seal policy registered on-chain. ✓", "done");
+                  setDeployStage('idle');
+                  setIsDeploying(false);
+                },
+                onError: (err) => {
+                  console.warn('[Builder] seal_approve failed:', err);
+                  addLog("Seal policy tx failed — Walrus blob still secured.", "seal");
+                  setDeployStage('idle');
+                  setIsDeploying(false);
+                }
+              });
+            } else {
+              addLog("System ready.", "done");
+              setDeployStage('idle');
+              setIsDeploying(false);
+            }
           },
           onError: (err) => {
             console.error(err);
@@ -549,14 +603,70 @@ export default function BuilderPage() {
                     </div>
                   </motion.div>
                 ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
-                    <div className="w-24 h-24 bg-gray-50/50 rounded-full flex items-center justify-center mb-8 border border-black/5 animate-pulse">
-                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-300">
-                        <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
-                      </svg>
+                  <div className="flex-1 flex flex-col gap-8 p-4">
+                    {/* Form Security — Seal Toggle */}
+                    <div>
+                      <h4 className="text-[10px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-6">Form Security</h4>
+                      <div className="p-8 rounded-[32px] border border-amber-200/60 bg-amber-50/40">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                              <label className="text-[11px] font-jakarta font-bold text-amber-700 uppercase tracking-widest">Seal Encryption</label>
+                            </div>
+                            <p className="text-[10px] text-amber-600/70 font-jakarta">
+                              {sealEnabled ? 'ON — Submissions are threshold-encrypted' : 'OFF — Submissions are stored in plaintext'}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => toggleSeal(!sealEnabled)}
+                            className={`w-14 h-7 rounded-full p-1 transition-all duration-500 ${
+                              sealEnabled ? 'bg-amber-500 shadow-[0_0_12px_rgba(217,119,6,0.4)]' : 'bg-gray-200 shadow-inner'
+                            }`}
+                          >
+                            <motion.div
+                              animate={{ x: sealEnabled ? 28 : 0 }}
+                              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                              className="w-5 h-5 rounded-full bg-white shadow-xl"
+                            />
+                          </button>
+                        </div>
+
+                        <AnimatePresence>
+                          {sealEnabled && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="pt-4 border-t border-amber-200/60 mt-4">
+                                <label className="text-[10px] font-jakarta font-bold text-amber-700 uppercase tracking-widest block mb-3">Authorized Decryptors</label>
+                                <p className="text-[10px] text-amber-600/60 font-jakarta mb-3">One wallet address per line. Only these wallets can read submissions.</p>
+                                <textarea
+                                  value={sealWalletInput}
+                                  onChange={(e) => saveSealWallets(e.target.value)}
+                                  rows={3}
+                                  placeholder={"0xabc123...\n0xdef456..."}
+                                  className="w-full bg-white/60 border border-amber-200 rounded-[20px] px-5 py-4 font-mono text-xs text-gray-700 outline-none focus:border-amber-400 transition-all resize-none placeholder:text-gray-300 shadow-inner"
+                                />
+                                <div className="flex items-center gap-2 mt-3">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                  <span className="text-[9px] font-jakarta text-amber-600 font-bold uppercase tracking-widest">
+                                    {sealWalletInput.split('\n').filter(w => w.trim()).length} wallet(s) authorized
+                                  </span>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
                     </div>
-                    <h4 className="font-outfit font-bold text-lg mb-2">No selection</h4>
-                    <p className="font-jakarta font-bold text-gray-400 text-xs leading-relaxed">Select a component on the canvas to configure its settings and properties.</p>
+
+                    {/* Misc hint */}
+                    <div className="text-center mt-auto">
+                      <p className="text-[10px] font-jakarta text-gray-400 leading-relaxed">Select any component on the canvas to configure its properties.</p>
+                    </div>
                   </div>
                 )}
               </AnimatePresence>

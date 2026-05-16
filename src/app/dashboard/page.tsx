@@ -371,22 +371,55 @@ export default function DashboardPage() {
 
             {/* Sidebar */}
             <div className="space-y-8">
-              <GlassCard className="!p-10 !bg-[#4a2e8c] !text-white !rounded-[48px] relative overflow-hidden group border-none shadow-[0_32px_64px_-16px_rgba(74,46,140,0.3)]">
-                <div className="relative z-10">
-                  <Badge color="purple" className="!bg-white/20 !text-white !border-white/20 !mb-6">Advanced</Badge>
-                  <h3 className="text-3xl font-syne font-extrabold mb-4">Walrus Node</h3>
-                  <p className="text-white/60 font-jakarta text-[15px] leading-relaxed mb-10">Host your own storage node for maximum speed and control over your session data.</p>
-                  <Button
-                    variant="ghost"
-                    className="w-full !bg-white !text-[#4a2e8c] font-extrabold !py-4 hover:scale-[1.02]"
-                    onClick={() => window.open('https://docs.walrus.site/', '_blank')}
+              <GlassCard className="!p-10 !bg-white/80 !rounded-[48px] border-white shadow-xl relative overflow-hidden">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h3 className="text-lg font-outfit font-bold text-black">Active Forms</h3>
+                    <p className="text-[10px] font-jakarta text-gray-400 uppercase tracking-widest font-bold mt-1">Your deployed sessions</p>
+                  </div>
+                  <div className={`w-2 h-2 rounded-full ${forms.length > 0 ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+                </div>
+                <div className="space-y-4">
+                  {forms.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-black/5">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+                      </div>
+                      <p className="font-jakarta text-xs text-gray-400 font-bold">No forms deployed yet</p>
+                    </div>
+                  ) : (
+                    forms.map((form) => {
+                      const subCount = responses.filter(r => r.formBlobId === form._blobId).length;
+                      return (
+                        <motion.button
+                          key={form._blobId}
+                          whileHover={{ x: 4 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => setSelectedFormId(form._blobId)}
+                          className={`w-full text-left p-5 rounded-[24px] border transition-all group ${selectedFormId === form._blobId ? 'bg-[#4a2e8c]/5 border-[#4a2e8c]/20' : 'bg-gray-50/50 border-black/5 hover:border-[#cdb4ff]'}`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-jakarta font-bold text-[13px] text-black truncate">{form.title}</div>
+                              <div className="text-[10px] font-jakarta text-gray-400 mt-1 uppercase tracking-wider font-bold">{subCount} response{subCount !== 1 ? 's' : ''}</div>
+                            </div>
+                            <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all ${selectedFormId === form._blobId ? 'bg-[#4a2e8c] text-white' : 'bg-black/5 group-hover:bg-[#4a2e8c] group-hover:text-white'}`}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                            </div>
+                          </div>
+                        </motion.button>
+                      );
+                    })
+                  )}
+                </div>
+                {forms.length > 0 && (
+                  <button
+                    onClick={() => setSelectedFormId('all')}
+                    className="mt-6 w-full text-center text-[10px] font-jakarta font-bold text-[#4a2e8c] uppercase tracking-widest hover:opacity-70 transition-opacity"
                   >
-                    Configure Node
-                  </Button>
-                </div>
-                <div className="absolute -bottom-10 -right-10 w-48 h-48 opacity-10 group-hover:scale-110 group-hover:-rotate-12 transition-all duration-1000">
-                  <Image src="/wal-footer.avif" alt="Mascot" fill className="object-contain" />
-                </div>
+                    View All Sessions →
+                  </button>
+                )}
               </GlassCard>
 
               <GlassCard className="!p-10 !bg-white/80 !rounded-[48px] border-white shadow-xl relative overflow-hidden">

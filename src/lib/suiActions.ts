@@ -28,6 +28,29 @@ export function createFormTx(
 }
 
 /**
+ * Creates a transaction that calls seal_approve on-chain.
+ * This registers the authorized decryptors for a form in a Sui shared object.
+ * The Seal SDK reads this object to enforce access control for threshold decryption.
+ *
+ * NOTE: formObjectId is the address of the on-chain Form shared object (not the blobId).
+ */
+export function sealApproveTx(
+  formObjectId: string,
+  authorizedDecryptors: string[]
+) {
+  const tx = new Transaction();
+  tx.moveCall({
+    target: `${WORM_PACKAGE_ID}::${WORM_MODULE}::${WORM_FUNCTIONS.SEAL_APPROVE}`,
+    arguments: [
+      tx.pure.address(formObjectId),
+      tx.pure.vector('address', authorizedDecryptors),
+    ],
+  });
+  return tx;
+}
+
+
+/**
  * Creates a transaction block to update the submission index blob ID on-chain.
  */
 export function updateSubmissionIndexTx(
