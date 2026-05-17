@@ -3,10 +3,12 @@
 import React, { useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
 import { GlassCard } from './ui';
+import Link from 'next/link';
 
 const FEATURES = [
   {
     title: "Immutable Blobs",
+    slug: "immutable-blobs",
     description: "Every form submission is stored as a permanent, content-addressed blob on the Walrus Protocol. Your data is immutable and decentralized by default.",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -19,6 +21,7 @@ const FEATURES = [
   },
   {
     title: "Seal Encryption",
+    slug: "seal-encryption",
     description: "Protect sensitive community feedback with integrated Seal encryption. Only authorized team members can decrypt and read private submissions.",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -30,6 +33,7 @@ const FEATURES = [
   },
   {
     title: "AI-Powered Insights",
+    slug: "ai-insights",
     description: "Analyze thousands of submissions in seconds. Our integrated AI summarizes feedback, identifies trends, and calculates average ratings automatically.",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -42,6 +46,7 @@ const FEATURES = [
   },
   {
     title: "Incentivized Forms",
+    slug: "incentivized-forms",
     description: "Reward your community for their time. Lock SUI rewards into your forms and let users claim them instantly upon successful submission.",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -53,6 +58,7 @@ const FEATURES = [
   },
   {
     title: "On-Chain Team Work",
+    slug: "team-work",
     description: "Manage submissions together. Invite team members by wallet address to read encrypted data, add notes, and update status on-chain.",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -66,6 +72,7 @@ const FEATURES = [
   },
   {
     title: "Export CSV/JSON",
+    slug: "export-data",
     description: "Take your data anywhere. Export all submissions to standard CSV or JSON formats with a single click for deeper analysis in your favorite tools.",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -78,6 +85,7 @@ const FEATURES = [
   },
   {
     title: "Rich Media Forms",
+    slug: "rich-media",
     description: "Build beautiful forms with support for rich text, dropdowns, star ratings, and direct file/video uploads to Walrus.",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -90,6 +98,7 @@ const FEATURES = [
   },
   {
     title: "No Middleman",
+    slug: "no-middleman",
     description: "Say goodbye to centralized servers and data siloes. Worm connects you directly to your community through a transparent, on-chain feedback loop.",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -120,22 +129,20 @@ const FeaturesSection = () => {
     visible: {
       y: 0,
       opacity: 1,
-      transition: {
-        duration: 0.8,
-        ease: [0.16, 1, 0.3, 1] as [number, number, number, number]
-      }
+      transition: { type: "spring" as const, damping: 20, stiffness: 100 }
     }
   };
 
   return (
-    <section ref={ref} className="py-32 px-8 relative z-10 overflow-hidden">
-      <div className="max-w-[1400px] mx-auto">
-        <div className="flex flex-col items-center text-center mb-24">
+    <section ref={ref} className="py-32 bg-gray-50 relative overflow-hidden">
+      <div className="max-w-[1400px] w-full mx-auto px-8 relative z-10">
+        
+        <div className="text-center mb-24 flex flex-col items-center">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={isInView ? { opacity: 1, scale: 1 } : {}}
-            transition={{ duration: 0.5 }}
-            className="bg-[#cdb4ff]/20 text-[#4a2e8c] text-[10px] font-bold tracking-[0.2em] uppercase px-5 py-2 rounded-full mb-6 border border-[#cdb4ff]/30"
+            initial={{ opacity: 0, y: 20 }}
+            animate={isInView ? { opacity: 1, y: 0 } : {}}
+            transition={{ duration: 0.6 }}
+            className="text-[10px] font-jakarta font-bold text-[#4a2e8c] uppercase tracking-[0.2em] mb-4"
           >
             Core Infrastructure
           </motion.div>
@@ -173,26 +180,31 @@ const FeaturesSection = () => {
         >
           {FEATURES.map((feature, i) => (
             <motion.div key={i} variants={itemVariants}>
-              <GlassCard className="h-full !p-12 !rounded-[48px] !bg-white/60 border-white hover:!bg-white transition-all group shadow-xl hover:shadow-2xl">
-                <div 
-                  className="w-16 h-16 rounded-3xl mb-8 flex items-center justify-center transition-transform group-hover:scale-110 duration-500 shadow-lg"
-                  style={{ backgroundColor: feature.color + '33', color: '#4a2e8c' }}
-                >
-                  {feature.icon}
+              <GlassCard className="h-full !p-12 !rounded-[48px] !bg-white/60 border-white hover:!bg-white transition-all group shadow-xl hover:shadow-2xl flex flex-col justify-between">
+                <div>
+                  <div 
+                    className="w-16 h-16 rounded-3xl mb-8 flex items-center justify-center transition-transform group-hover:scale-110 duration-500 shadow-lg"
+                    style={{ backgroundColor: feature.color + '33', color: '#4a2e8c' }}
+                  >
+                    {feature.icon}
+                  </div>
+                  <h3 className="text-2xl font-syne font-extrabold mb-4 text-black group-hover:text-[#4a2e8c] transition-colors tracking-tight">
+                    {feature.title}
+                  </h3>
+                  <p className="font-jakarta font-medium text-gray-500 leading-relaxed">
+                    {feature.description}
+                  </p>
                 </div>
-                <h3 className="text-2xl font-syne font-extrabold mb-4 text-black group-hover:text-[#4a2e8c] transition-colors tracking-tight">
-                  {feature.title}
-                </h3>
-                <p className="font-jakarta font-medium text-gray-500 leading-relaxed">
-                  {feature.description}
-                </p>
                 
-                <div className="mt-10 flex items-center gap-2 text-[10px] font-bold text-[#4a2e8c] uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
+                <Link 
+                  href={`/docs/${feature.slug}`}
+                  className="mt-10 flex items-center gap-2 text-[10px] font-bold text-[#4a2e8c] uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0 hover:text-black"
+                >
                   Learn More 
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M5 12h14M12 5l7 7-7 7" />
                   </svg>
-                </div>
+                </Link>
               </GlassCard>
             </motion.div>
           ))}
