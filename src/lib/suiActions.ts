@@ -76,11 +76,36 @@ export function setupTeamAndSealTx(
       tx.pure.vector('address', decryptors),
     ],
   });
+  return tx;
+}
+
+/**
+ * Creates a transaction block to add a decryptor to an existing form.
+ */
+export function addDecryptorTx(
+  formObjectId: string,
+  approvalObjectId: string,
+  newDecryptor: string
+) {
+  const tx = new Transaction();
   tx.moveCall({
-    target: `${WORM_PACKAGE_ID}::${WORM_MODULE}::create_team`,
+    target: `${WORM_PACKAGE_ID}::${WORM_MODULE}::${WORM_FUNCTIONS.ADD_DECRYPTOR}`,
     arguments: [
-      tx.pure.address(formObjectId),
-      tx.pure.vector('address', decryptors),
+      tx.object(formObjectId),
+      tx.object(approvalObjectId),
+      tx.pure.address(newDecryptor),
+    ],
+  });
+  return tx;
+}
+
+export function addTeamMemberTx(formObjectId: string, memberAddress: string) {
+  const tx = new Transaction();
+  tx.moveCall({
+    target: `${WORM_PACKAGE_ID}::${WORM_MODULE}::add_team_member`,
+    arguments: [
+      tx.object(formObjectId),
+      tx.pure.address(memberAddress),
     ],
   });
   return tx;
@@ -109,20 +134,20 @@ export function updateSubmissionIndexTx(
  */
 export function updateSubmissionMetaTx(
   formObjectId: string,
-  teamObjectId: string,
   submissionBlobId: string,
   status: string,
-  note: string
+  note: string,
+  rank: number
 ) {
   const tx = new Transaction();
   tx.moveCall({
     target: `${WORM_PACKAGE_ID}::${WORM_MODULE}::update_submission_meta`,
     arguments: [
       tx.object(formObjectId),
-      tx.object(teamObjectId),
       tx.pure.string(submissionBlobId),
       tx.pure.string(status),
       tx.pure.string(note),
+      tx.pure.u8(rank),
     ],
   });
   return tx;
@@ -165,8 +190,9 @@ export async function getOwnedForms(address: string) {
  */
 export async function getFormsByIds(ids: string[]) {
   if (ids.length === 0) return [];
+  const uniqueIds = Array.from(new Set(ids));
   const objects = await client.multiGetObjects({
-    ids,
+    ids: uniqueIds,
     options: { showContent: true },
   });
 
@@ -177,6 +203,7 @@ export async function getFormsByIds(ids: string[]) {
       title: content?.fields?.title,
       formBlobId: content?.fields?.form_blob_id,
       latestSubmissionIndexBlobId: content?.fields?.latest_submission_index_blob_id,
+      teamMembers: content?.fields?.team_members || [],
     };
   });
 }
@@ -320,5 +347,35 @@ export function claimRewardTx(poolObjectId: string) {
     ],
   });
   return tx;
+}
+
+export async function getDecryptorsMapping(): Promise<Record<string, string[]>> {
+  const formCreatedEvents = await client.queryEvents({
+    query: { MoveEventType: `${WORM_PACKAGE_ID}::${WORM_MODULE}::FormCreated` },
+  });
+  const teamCreatedEvents = await client.queryEvents({
+    query: { MoveEventType: `${WORM_PACKAGE_ID}::${WORM_MODULE}::TeamCreated` },
+  });
+
+  const objectIdToBlobId: Record<string, string> = {};
+  formCreatedEvents.data.forEach((e: any) => {
+    const parsed = e.parsedJson as any;
+    if (parsed && parsed.form_id && parsed.form_blob_id) {
+      objectIdToBlobId[parsed.form_id] = parsed.form_blob_id;
+    }
+  });
+
+  const blobIdToMembers: Record<string, string[]> = {};
+  teamCreatedEvents.data.forEach((e: any) => {
+    const parsed = e.parsedJson as any;
+    if (parsed && parsed.form_id && parsed.members) {
+      const blobId = objectIdToBlobId[parsed.form_id];
+      if (blobId) {
+        blobIdToMembers[blobId] = parsed.members;
+      }
+    }
+  });
+
+  return blobIdToMembers;
 }
 

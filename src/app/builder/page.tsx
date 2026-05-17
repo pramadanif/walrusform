@@ -152,7 +152,10 @@ export default function BuilderPage() {
     
     try {
       const sealWallets = getSealWallets();
-      const encryptWithSeal = sealWallets.length > 0;
+      if (account?.address && !sealWallets.includes(account.address)) {
+        sealWallets.push(account.address);
+      }
+      const encryptWithSeal = sealEnabled && sealWallets.length > 0;
 
       const form: FormDefinition = {
         id: crypto.randomUUID(),

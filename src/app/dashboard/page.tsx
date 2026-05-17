@@ -14,7 +14,7 @@ import { exportSubmissionsToCSV } from '@/lib/csvExport';
 import { getExplorerUrl } from '@/lib/walrus';
 import { decryptWithSeal } from '@/lib/seal';
 import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
-import { getFormByBlobId, getTeamForForm, updateSubmissionMetaTx, getFormsForTeamMember, getFormsByIds } from '@/lib/suiActions';
+import { getFormByBlobId, getTeamForForm, updateSubmissionMetaTx, getFormsForTeamMember, getFormsByIds, addDecryptorTx, getDecryptorsMapping, addTeamMemberTx } from '@/lib/suiActions';
 import DOMPurify from 'dompurify';
 import { analyzeSubmissions, AIAnalysisResult } from '@/lib/ai';
 
@@ -85,6 +85,7 @@ export default function DashboardPage() {
   const [loadingResponses, setLoadingResponses] = useState(true);
   const [selectedResponse, setSelectedResponse] = useState<Submission | null>(null);
   const [noteInput, setNoteInput] = useState('');
+  const [rankInput, setRankInput] = useState(0);
   const [savingNote, setSavingNote] = useState(false);
   const [savedNote, setSavedNote] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -109,6 +110,7 @@ export default function DashboardPage() {
         addSyncLog("Querying Sui for decentralized registry...", "sui");
         const registry = await getFormRegistry(account?.address);
         let formIds = Object.keys(registry);
+        const teamMembersMapping: Record<string, string[]> = {};
         
         if (account?.address) {
           addSyncLog("Checking for team invitations...", "sui");
@@ -117,6 +119,12 @@ export default function DashboardPage() {
             addSyncLog(`Found ${teamFormIds.length} team invitations.`, "sui");
             const teamForms = await getFormsByIds(teamFormIds);
             const teamFormBlobIds = teamForms.map(f => f.formBlobId).filter(Boolean) as string[];
+            
+            teamForms.forEach(f => {
+              if (f.formBlobId) {
+                teamMembersMapping[f.formBlobId] = f.teamMembers;
+              }
+            });
             
             formIds = Array.from(new Set([...formIds, ...teamFormBlobIds]));
           }
@@ -146,10 +154,14 @@ export default function DashboardPage() {
 
         addSyncLog("Loading submission indices from Walrus...", "walrus");
         setSyncStatus('seal');
+        
+        addSyncLog("Fetching updated decryptors from Sui...", "sui");
+        const decryptorsMapping = await getDecryptorsMapping();
+        
         const allSubsPerForm = await Promise.allSettled(
           formIds.map((fid) => getSubmissionsForForm(fid).then(async (subs) => {
             const form = formByBlobId[fid];
-            const allowed = form?.settings.allowedDecryptors ?? [];
+            const allowed = teamMembersMapping[fid] ?? decryptorsMapping[fid] ?? form?.settings.allowedDecryptors ?? [];
             if (subs.length > 0) {
               addSyncLog(`Decrypting ${subs.length} responses for ${form?.title || fid}...`, "seal");
             }
@@ -231,13 +243,13 @@ export default function DashboardPage() {
     if (!selectedResponse?._blobId) return;
     setSavingNote(true);
     
-    if (selectedFormObjectId && selectedTeamObjectId) {
+    if (selectedFormObjectId) {
       const tx = updateSubmissionMetaTx(
         selectedFormObjectId,
-        selectedTeamObjectId,
         selectedResponse._blobId!,
         selectedResponse.status || 'New',
-        noteInput
+        noteInput,
+        rankInput
       );
       signAndExecute({ transaction: tx }, {
         onSuccess: () => {
@@ -261,13 +273,13 @@ export default function DashboardPage() {
     if (!selectedResponse?._blobId) return;
     const s = status as AdminMeta['status'];
     
-    if (selectedFormObjectId && selectedTeamObjectId) {
+    if (selectedFormObjectId) {
       const tx = updateSubmissionMetaTx(
         selectedFormObjectId,
-        selectedTeamObjectId,
         selectedResponse._blobId!,
         status,
-        selectedResponse.adminNote || ''
+        selectedResponse.adminNote || '',
+        rankInput
       );
       signAndExecute({ transaction: tx }, {
         onSuccess: () => {
@@ -277,6 +289,32 @@ export default function DashboardPage() {
           setSelectedResponse((prev) => prev ? { ...prev, status: s } : prev);
         },
         onError: (e) => alert('Failed to update status: ' + e.message),
+      });
+    } else {
+      alert('Form or Team ID not loaded yet. Please wait or refresh.');
+    }
+  };
+
+  const handleRankChange = (rank: number) => {
+    if (!selectedResponse?._blobId) return;
+    setRankInput(rank);
+    
+    if (selectedFormObjectId) {
+      const tx = updateSubmissionMetaTx(
+        selectedFormObjectId,
+        selectedResponse._blobId!,
+        selectedResponse.status || 'New',
+        noteInput,
+        rank
+      );
+      signAndExecute({ transaction: tx }, {
+        onSuccess: () => {
+          setResponses((prev) =>
+            prev.map((r) => r._blobId === selectedResponse._blobId ? { ...r, rank: rank } : r)
+          );
+          setSelectedResponse((prev) => prev ? { ...prev, rank: rank } : prev);
+        },
+        onError: (e) => alert('Failed to save rank: ' + e.message),
       });
     } else {
       alert('Form or Team ID not loaded yet. Please wait or refresh.');
@@ -319,6 +357,38 @@ export default function DashboardPage() {
     const subsForForm = responses.filter((r) => r.formBlobId === formToExport._blobId);
     exportSubmissionsToCSV(formToExport, subsForForm);
   };
+
+  const handleAddTeamMember = async () => {
+    const address = prompt("Enter wallet address to add as admin:");
+    if (!address) return;
+    
+    if (!selectedFormObjectId) {
+      alert("Form ID not loaded yet. Please wait or refresh.");
+      return;
+    }
+    
+    try {
+      let tx;
+      if (selectedTeamObjectId) {
+        tx = addDecryptorTx(selectedFormObjectId, selectedTeamObjectId, address);
+      } else {
+        tx = addTeamMemberTx(selectedFormObjectId, address);
+      }
+      signAndExecute({ transaction: tx }, {
+        onSuccess: (result) => {
+          alert("Success! Team member added.");
+          console.log(result);
+        },
+        onError: (error) => {
+          alert("Error adding team member: " + error.message);
+          console.log(error);
+        }
+      });
+    } catch (e) {
+      alert("Error: " + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
   const runAIAnalysis = async () => {
     const formToAnalyze = forms.find((f) => f._blobId === selectedFormId) ?? forms[0];
     if (!formToAnalyze) return;
@@ -413,6 +483,11 @@ export default function DashboardPage() {
               <Button variant="ghost" onClick={handleExportCSV} className="shadow-sm border-black/5 !px-8">
                 Export
               </Button>
+              {selectedFormId !== 'all' && (
+                <Button variant="ghost" onClick={handleAddTeamMember} className="shadow-sm border-black/5 !px-8">
+                  Add Team
+                </Button>
+              )}
               <Button 
                 variant="ghost" 
                 onClick={runAIAnalysis} 
@@ -529,6 +604,7 @@ export default function DashboardPage() {
                           <th className="p-6 font-jakarta text-[10px] text-gray-400 font-bold uppercase tracking-widest pl-10">Response ID</th>
                           <th className="p-6 font-jakarta text-[10px] text-gray-400 font-bold uppercase tracking-widest">Session Title</th>
                           <th className="p-6 font-jakarta text-[10px] text-gray-400 font-bold uppercase tracking-widest">Status</th>
+                          <th className="p-6 font-jakarta text-[10px] text-gray-400 font-bold uppercase tracking-widest">Rank</th>
                           <th className="p-6 font-jakarta text-[10px] text-gray-400 font-bold uppercase tracking-widest text-right pr-10">Action</th>
                         </tr>
                       </thead>
@@ -542,6 +618,7 @@ export default function DashboardPage() {
                             onClick={() => {
                               setSelectedResponse(resp);
                               setNoteInput(resp.adminNote ?? '');
+                              setRankInput(resp.rank ?? 0);
                               setSavedNote(false);
                             }}
                             className="hover:bg-[#4a2e8c]/5 cursor-pointer group transition-all"
@@ -563,6 +640,11 @@ export default function DashboardPage() {
                               <Badge color={resp.status === 'Actioned' ? 'green' : resp.status === 'In Review' ? 'purple' : resp.status === 'Archived' ? 'gray' : 'blue'}>
                                 {resp.status ?? 'New'}
                               </Badge>
+                            </td>
+                            <td className="p-6">
+                              <span className="font-jakarta font-bold text-[13px] text-gray-600">
+                                {resp.rank ? `⭐️ ${resp.rank}` : '-'}
+                              </span>
                             </td>
                             <td className="p-6 text-right pr-10">
                               <div className="w-10 h-10 rounded-full bg-black/5 flex items-center justify-center ml-auto group-hover:bg-[#4a2e8c] group-hover:text-white transition-all">
@@ -770,6 +852,25 @@ export default function DashboardPage() {
                             }`}
                           >
                             {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <label className="text-[11px] font-jakarta font-bold text-[#4a2e8c] uppercase tracking-[0.2em] block">Rank / Priority</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {[1, 2, 3, 4, 5].map((r) => (
+                          <button
+                            key={r}
+                            onClick={() => handleRankChange(r)}
+                            className={`w-10 h-10 rounded-full border font-jakarta font-bold text-[14px] transition-all ${
+                              rankInput === r
+                                ? 'bg-[#4a2e8c] text-white border-[#4a2e8c] shadow-lg scale-105'
+                                : 'bg-white text-gray-400 border-gray-100 hover:border-[#cdb4ff] hover:text-[#4a2e8c]'
+                            }`}
+                          >
+                            {r}
                           </button>
                         ))}
                       </div>
