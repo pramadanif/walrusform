@@ -13,7 +13,8 @@ import { encryptWithSeal } from '@/lib/seal';
 import { RichTextInput } from '@/components/inputs/RichTextInput';
 import { FileUploadInput } from '@/components/inputs/FileUploadInput';
 import { getExplorerUrl } from '@/lib/walrus';
-import { useCurrentAccount } from '@mysten/dapp-kit';
+import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { getFormByBlobId, updateSubmissionIndexTx } from '@/lib/suiActions';
 import Navbar from '@/components/Navbar';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -27,6 +28,7 @@ interface PageProps {
 export default function PublicFormPage({ params }: PageProps) {
   const { id: blobId } = use(params);
   const account = useCurrentAccount();
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
 
   const [formDef, setFormDef] = useState<FormDefinition | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,6 +68,11 @@ export default function PublicFormPage({ params }: PageProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formDef) return;
+    if (!account?.address) {
+      setSubmitError('Please connect your wallet to submit this form.');
+      setSubmitting(false);
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     setSubmitStage('preparing');
@@ -88,7 +95,7 @@ export default function PublicFormPage({ params }: PageProps) {
         encrypted = true;
       }
 
-      const { submissionBlobId } = await submitForm(
+      const { submissionBlobId, newIndexBlobId } = await submitForm(
         blobId,
         answersToSubmit,
         mediaToSubmit,
@@ -101,11 +108,48 @@ export default function PublicFormPage({ params }: PageProps) {
             else setSubmitStage(stage);
         }
       );
-      setSubmittedBlobId(submissionBlobId);
+
+      // Update index on-chain if we have the new pointer
+      if (newIndexBlobId) {
+        setSubmitStage('Sui: Updating on-chain index...');
+        try {
+          const suiForm = await getFormByBlobId(blobId);
+          if (suiForm?.objectId) {
+            signAndExecute({
+              transaction: updateSubmissionIndexTx(suiForm.objectId, newIndexBlobId),
+            }, {
+              onSuccess: () => {
+                console.log('[Form] On-chain index updated.');
+                setSubmittedBlobId(submissionBlobId);
+                setSubmitting(false);
+                setSubmitStage('');
+              },
+              onError: (err) => {
+                console.warn('[Form] Failed to update on-chain index:', err);
+                setSubmitError('Failed to update on-chain index. But submission was saved on Walrus.');
+                setSubmitting(false);
+                setSubmitStage('');
+              }
+            });
+          } else {
+            setSubmittedBlobId(submissionBlobId);
+            setSubmitting(false);
+            setSubmitStage('');
+          }
+        } catch (e) {
+          console.warn('[Form] Failed to fetch form object for index update:', e);
+          setSubmittedBlobId(submissionBlobId);
+          setSubmitting(false);
+          setSubmitStage('');
+        }
+      } else {
+        setSubmittedBlobId(submissionBlobId);
+        setSubmitting(false);
+        setSubmitStage('');
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Submission failed';
       setSubmitError(msg);
-    } finally {
       setSubmitting(false);
       setSubmitStage('');
     }

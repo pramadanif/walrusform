@@ -1,5 +1,6 @@
 import { uploadToWalrus, readFromWalrus } from './walrus';
 import { appendToSubmissionIndex, loadSubmissionIndex } from './walrusRegistry';
+import { client, getFormByBlobId } from './suiActions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,7 +61,7 @@ export async function submitForm(
   submitterWallet?: string,
   options?: { encrypted?: boolean },
   onStageChange?: (stage: UploadStage) => void
-): Promise<{ submissionBlobId: string }> {
+): Promise<{ submissionBlobId: string, newIndexBlobId?: string }> {
 
   onStageChange?.('preparing');
 
@@ -88,20 +89,16 @@ export async function submitForm(
   const indexEntry = { blobId, submittedAt: submission.submittedAt };
 
   // 1. Append to Walrus submission index blob (decentralized)
+  let newIndexBlobId: string | undefined;
   try {
-    await appendToSubmissionIndex(formBlobId, indexEntry);
+    newIndexBlobId = await appendToSubmissionIndex(formBlobId, indexEntry);
   } catch (e) {
-    console.warn('[SubmissionStorage] Walrus index update failed, localStorage-only fallback active.', e);
-    // Fallback: update legacy localStorage index directly
-    const legacyKey = `walrusform_subs_${formBlobId}`;
-    const existing = JSON.parse(localStorage.getItem(legacyKey) ?? '[]');
-    existing.unshift(indexEntry);
-    localStorage.setItem(legacyKey, JSON.stringify(existing));
+    console.warn('[SubmissionStorage] Walrus index update failed.', e);
   }
 
   onStageChange?.('finalized');
 
-  return { submissionBlobId: blobId };
+  return { submissionBlobId: blobId, newIndexBlobId };
 }
 
 /**
@@ -115,11 +112,39 @@ export async function getSubmissionsForForm(
   // Use Walrus index blob with localStorage fallback
   const index = await loadSubmissionIndex(formBlobId);
 
+  // Fetch form object to get ID for dynamic fields
+  let formObjectId: string | undefined;
+  try {
+    const suiForm = await getFormByBlobId(formBlobId);
+    formObjectId = suiForm?.objectId;
+  } catch (e) {
+    console.warn('[SubmissionStorage] Failed to fetch form object for dynamic fields:', e);
+  }
+
   const submissions = await Promise.allSettled(
     index.map(async ({ blobId }) => {
       const raw = await readFromWalrus(blobId);
       const sub = JSON.parse(raw) as FormSubmission;
-      const admin = getAdminMeta(blobId);
+      
+      let admin: AdminMeta = { status: 'New', adminNote: '' };
+      if (formObjectId) {
+        try {
+          const fieldRes = await client.getDynamicFieldObject({
+            parentId: formObjectId,
+            name: { type: '0x1::string::String', value: blobId },
+          });
+          if (fieldRes.data?.content?.dataType === 'moveObject') {
+            const content = fieldRes.data.content as any;
+            admin = {
+              status: (content.fields.value.fields.status || 'New') as AdminMeta['status'],
+              adminNote: content.fields.value.fields.note || '',
+            };
+          }
+        } catch (e) {
+          // Ignore if field doesn't exist
+        }
+      }
+      
       return { ...sub, ...admin, _blobId: blobId };
     })
   );

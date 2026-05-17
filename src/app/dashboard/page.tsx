@@ -15,6 +15,7 @@ import { getExplorerUrl } from '@/lib/walrus';
 import { decryptWithSeal } from '@/lib/seal';
 import { useCurrentAccount } from '@mysten/dapp-kit';
 import DOMPurify from 'dompurify';
+import { analyzeSubmissions, AIAnalysisResult } from '@/lib/ai';
 
 type Submission = FormSubmission & AdminMeta & { _blobId?: string; _formTitle?: string; _decrypted?: boolean; _sealError?: string };
 
@@ -24,6 +25,8 @@ const STATUS_OPTIONS = ['New', 'In Review', 'Actioned', 'Archived'] as const;
 
 export default function DashboardPage() {
   const [responses, setResponses] = useState<Submission[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<AIAnalysisResult | null>(null);
   const [forms, setForms] = useState<(FormDefinition & { _blobId: string })[]>([]);
   const [selectedFormId, setSelectedFormId] = useState<string | 'all'>('all');
   const [loadingResponses, setLoadingResponses] = useState(true);
@@ -189,6 +192,27 @@ export default function DashboardPage() {
     const subsForForm = responses.filter((r) => r.formBlobId === formToExport._blobId);
     exportSubmissionsToCSV(formToExport, subsForForm);
   };
+  const runAIAnalysis = async () => {
+    const formToAnalyze = forms.find((f) => f._blobId === selectedFormId) ?? forms[0];
+    if (!formToAnalyze) return;
+    const subsForForm = responses.filter((r) => r.formBlobId === formToAnalyze._blobId);
+    if (subsForForm.length === 0) {
+      alert('No submissions to analyze for this form.');
+      return;
+    }
+    
+    setAiLoading(true);
+    try {
+      const submissionsToAnalyze = subsForForm.map(s => s.answers);
+      const result = await analyzeSubmissions(formToAnalyze.title, submissionsToAnalyze);
+      setAiResult(result);
+    } catch (e) {
+      console.error(e);
+      alert(e instanceof Error ? e.message : 'AI Analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const [now, setNow] = useState(0);
 
@@ -262,6 +286,17 @@ export default function DashboardPage() {
               <Button variant="ghost" onClick={handleExportCSV} className="shadow-sm border-black/5 !px-8">
                 Export
               </Button>
+              <Button 
+                variant="ghost" 
+                onClick={runAIAnalysis} 
+                className="shadow-sm border-black/5 !px-8 flex items-center gap-2 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200/50 shadow-[0_0_15px_rgba(124,58,237,0.1)] transition-all duration-300"
+                disabled={aiLoading}
+              >
+                {aiLoading && (
+                  <div className="w-4 h-4 border-2 border-[#4a2e8c] border-t-transparent rounded-full animate-spin" />
+                )}
+                <span className="font-outfit font-bold bg-gradient-to-r from-[#4a2e8c] to-[#7c3aed] bg-clip-text text-transparent">AI Insights</span>
+              </Button>
               <Button variant="purple" onClick={() => router.push('/builder')} className="shadow-2xl !px-10">New Session +</Button>
             </motion.div>
           </div>
@@ -277,6 +312,53 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
             {/* Main List */}
             <div className="lg:col-span-2">
+              {aiResult && (
+                <GlassCard className="!p-10 mb-8 !bg-purple-50/50 !border-purple-200/50 !rounded-[32px] shadow-xl">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-[#4a2e8c] rounded-full flex items-center justify-center text-white font-bold text-xs">
+                        AI
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-outfit font-bold text-black">AI Insights</h3>
+                        <p className="text-[10px] font-jakarta text-gray-400 uppercase tracking-widest font-bold">OpenRouter Powered</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setAiResult(null)} className="text-gray-400 hover:text-gray-600">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div>
+                      <p className="font-jakarta text-sm text-gray-700 leading-relaxed">{aiResult.rawSummary}</p>
+                    </div>
+
+                    <div>
+                      <h4 className="text-[11px] font-jakarta font-bold text-[#4a2e8c] uppercase tracking-widest mb-3">Key Consensus Points</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {aiResult.consensusPoints.map((point, i) => (
+                          <span key={i} className="px-4 py-2 bg-white/80 rounded-full border border-purple-100 text-xs font-jakarta font-bold text-gray-700 shadow-sm">
+                            {point}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-[11px] font-jakarta font-bold text-[#4a2e8c] uppercase tracking-widest mb-3">Suggested Actions</h4>
+                      <ul className="space-y-2">
+                        {aiResult.suggestedActions.map((action, i) => (
+                          <li key={i} className="flex items-start gap-3 text-xs font-jakarta text-gray-600">
+                            <span className="text-[#4a2e8c] font-bold">•</span>
+                            {action}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </GlassCard>
+              )}
               <GlassCard className="!p-0 overflow-hidden !bg-white/80 !rounded-[48px] border-white shadow-2xl relative h-full">
                 <div className="p-10 border-b border-black/[0.03] flex justify-between items-center bg-white/40">
                   <h3 className="text-2xl font-outfit font-bold">Recent Submissions</h3>

@@ -12,7 +12,7 @@ const queryClient = new QueryClient({
 });
 
 const { networkConfig } = createNetworkConfig({
-  testnet: { url: getJsonRpcFullnodeUrl('testnet') },
+  testnet: { url: getJsonRpcFullnodeUrl('testnet'), network: 'testnet' },
 });
 
 export function Providers({ children }: { children: React.ReactNode }) {

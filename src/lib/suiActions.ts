@@ -2,7 +2,7 @@ import { Transaction } from '@mysten/sui/transactions';
 import { WORM_PACKAGE_ID, WORM_MODULE, WORM_FUNCTIONS, WORM_OBJECT_TYPES } from './contracts';
 import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 
-const client = new SuiJsonRpcClient({ 
+export const client = new SuiJsonRpcClient({ 
   url: 'https://fullnode.testnet.sui.io:443',
   network: 'testnet'
 });
@@ -49,6 +49,42 @@ export function sealApproveTx(
   return tx;
 }
 
+export function createTeamTx(
+  formObjectId: string,
+  members: string[]
+) {
+  const tx = new Transaction();
+  tx.moveCall({
+    target: `${WORM_PACKAGE_ID}::${WORM_MODULE}::create_team`,
+    arguments: [
+      tx.pure.address(formObjectId),
+      tx.pure.vector('address', members),
+    ],
+  });
+  return tx;
+}
+
+export function setupTeamAndSealTx(
+  formObjectId: string,
+  decryptors: string[]
+) {
+  const tx = new Transaction();
+  tx.moveCall({
+    target: `${WORM_PACKAGE_ID}::${WORM_MODULE}::seal_approve`,
+    arguments: [
+      tx.pure.address(formObjectId),
+      tx.pure.vector('address', decryptors),
+    ],
+  });
+  tx.moveCall({
+    target: `${WORM_PACKAGE_ID}::${WORM_MODULE}::create_team`,
+    arguments: [
+      tx.pure.address(formObjectId),
+      tx.pure.vector('address', decryptors),
+    ],
+  });
+  return tx;
+}
 
 /**
  * Creates a transaction block to update the submission index blob ID on-chain.
@@ -69,20 +105,51 @@ export function updateSubmissionIndexTx(
 }
 
 /**
+ * Creates a transaction block to update the submission meta (notes & status) on-chain.
+ */
+export function updateSubmissionMetaTx(
+  formObjectId: string,
+  teamObjectId: string,
+  submissionBlobId: string,
+  status: string,
+  note: string
+) {
+  const tx = new Transaction();
+  tx.moveCall({
+    target: `${WORM_PACKAGE_ID}::${WORM_MODULE}::update_submission_meta`,
+    arguments: [
+      tx.object(formObjectId),
+      tx.object(teamObjectId),
+      tx.pure.string(submissionBlobId),
+      tx.pure.string(status),
+      tx.pure.string(note),
+    ],
+  });
+  return tx;
+}
+
+/**
  * Queries the blockchain for Form objects owned by a specific address.
  */
 export async function getOwnedForms(address: string) {
-  const response = await client.getOwnedObjects({
-    owner: address,
-    filter: {
-      StructType: WORM_OBJECT_TYPES.FORM,
-    },
-    options: {
-      showContent: true,
+  const events = await client.queryEvents({
+    query: {
+      MoveEventType: `${WORM_PACKAGE_ID}::worm::FormCreated`,
     },
   });
 
-  return response.data.map((obj: any) => {
+  const formIds = events.data
+    .filter((e: any) => e.parsedJson?.creator === address)
+    .map((e: any) => e.parsedJson?.form_id);
+
+  if (formIds.length === 0) return [];
+
+  const objects = await client.multiGetObjects({
+    ids: formIds,
+    options: { showContent: true },
+  });
+
+  return objects.map((obj: any) => {
     const content = obj.data?.content as any;
     return {
       objectId: obj.data?.objectId,
@@ -138,3 +205,52 @@ export async function getAllForms() {
         return [];
     }
 }
+
+/**
+ * Creates a form with an attached SUI reward pool.
+ * rewardPerResponse: amount in MIST (1 SUI = 1_000_000_000 MIST)
+ * maxRewardedResponses: cap on how many respondents get paid
+ */
+export function createIncentivizedFormTx(
+  title: string,
+  formBlobId: string,
+  submissionIndexBlobId: string,
+  rewardPerResponseMist: bigint,
+  maxRewardedResponses: number
+) {
+  const tx = new Transaction();
+  // Split coin from gas for the reward pool
+  const totalPool = rewardPerResponseMist * BigInt(maxRewardedResponses);
+  const [rewardCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(totalPool)]);
+
+  tx.moveCall({
+    target: `${WORM_PACKAGE_ID}::${WORM_MODULE}::create_incentivized_form`,
+    arguments: [
+      tx.pure.string(title),
+      tx.pure.string(formBlobId),
+      tx.pure.string(submissionIndexBlobId),
+      rewardCoin,
+      tx.pure.u64(rewardPerResponseMist),
+      tx.pure.u64(BigInt(maxRewardedResponses)),
+    ],
+  });
+  return tx;
+}
+
+/**
+ * Respondent claims their SUI reward after submitting feedback.
+ * formObjectId: the IncentivizedForm shared object ID.
+ * submissionBlobId: proof of submission on Walrus.
+ */
+export function claimRewardTx(formObjectId: string, submissionBlobId: string) {
+  const tx = new Transaction();
+  tx.moveCall({
+    target: `${WORM_PACKAGE_ID}::${WORM_MODULE}::claim_reward`,
+    arguments: [
+      tx.object(formObjectId),
+      tx.pure.string(submissionBlobId),
+    ],
+  });
+  return tx;
+}
+
