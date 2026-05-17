@@ -63,14 +63,18 @@ export default function BuilderPage() {
   const [deployedBlobId, setDeployedBlobId] = useState<string | null>(null);
   const [deployStage, setDeployStage] = useState<'idle' | 'walrus' | 'sui'>('idle');
   const [activityLog, setActivityLog] = useState<{msg: string, type: 'seal' | 'walrus' | 'sui' | 'done'}[]>([]);
-  const [sealEnabled, setSealEnabled] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    try { return JSON.parse(localStorage.getItem('walrusform_seal_wallets') ?? '[]').length > 0; } catch { return false; }
-  });
-  const [sealWalletInput, setSealWalletInput] = useState<string>(() => {
-    if (typeof window === 'undefined') return '';
-    try { return (JSON.parse(localStorage.getItem('walrusform_seal_wallets') ?? '[]') as string[]).join('\n'); } catch { return ''; }
-  });
+  const [sealEnabled, setSealEnabled] = useState<boolean>(false);
+  const [sealWalletInput, setSealWalletInput] = useState<string>('');
+
+  React.useEffect(() => {
+    try {
+      const wallets = JSON.parse(localStorage.getItem('walrusform_seal_wallets') ?? '[]');
+      setSealEnabled(wallets.length > 0);
+      setSealWalletInput(wallets.join('\n'));
+    } catch {
+      // ignore
+    }
+  }, []);
   const [incentivesEnabled, setIncentivesEnabled] = useState(false);
   const [rewardPerResponse, setRewardPerResponse] = useState('0.1'); // in SUI
   const [maxResponses, setMaxResponses] = useState('100');
@@ -181,6 +185,9 @@ export default function BuilderPage() {
         
         // Build the allowed decryptors list from current UI state
         const decryptorList = sealWalletInput.split('\n').map(w => w.trim()).filter(Boolean);
+        if (account?.address && !decryptorList.includes(account.address)) {
+          decryptorList.push(account.address);
+        }
         
         const tx = incentivesEnabled 
           ? createIncentivizedFormTx(
