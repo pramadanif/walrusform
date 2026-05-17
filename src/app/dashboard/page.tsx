@@ -22,6 +22,39 @@ type Submission = FormSubmission & AdminMeta & { _blobId?: string; _formTitle?: 
 
 const STATUS_OPTIONS = ['New', 'In Review', 'Actioned', 'Archived'] as const;
 
+function AnswerItem({ label, value, fieldType }: { label: string, value: any, fieldType?: string }) {
+  const [error, setError] = useState(false);
+  
+  const isBlobId = typeof value === 'string' && /^[a-zA-Z0-9_-]{43,44}$/.test(value);
+  
+  return (
+    <div className="p-6 rounded-[32px] bg-gray-50/50 border border-black/5">
+      <div className="text-[10px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-2">{label}</div>
+      <div className="font-jakarta font-bold text-[15px] text-gray-800 break-words whitespace-pre-wrap">
+        {fieldType === 'video' || (isBlobId && !error) ? (
+          <video 
+            src={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${value}`} 
+            controls 
+            className="w-full max-h-[300px] rounded-2xl mt-2" 
+            onError={() => setError(true)}
+          />
+        ) : fieldType === 'screenshot' || (isBlobId && error) ? (
+          <img 
+            src={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${value}`} 
+            alt={label} 
+            className="w-full max-h-[300px] object-contain rounded-2xl mt-2" 
+            onError={() => setError(true)}
+          />
+        ) : !(typeof value === 'string' && value.startsWith('<')) ? (
+          typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value ?? '—')
+        ) : (
+          <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(value as string) }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -679,16 +712,19 @@ export default function DashboardPage() {
                   <div className="space-y-6">
                     <h4 className="text-[11px] font-jakarta font-bold text-[#4a2e8c] uppercase tracking-[0.2em]">Response Data</h4>
                     <div className="grid grid-cols-1 gap-4">
-                      {Object.entries(selectedResponse.answers ?? {}).map(([k, v]) => (
-                        <div key={k} className="p-6 rounded-[32px] bg-gray-50/50 border border-black/5">
-                          <div className="text-[10px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-2">{k}</div>
-                          <div className="font-jakarta font-bold text-[15px] text-gray-800 break-words whitespace-pre-wrap"
-                                dangerouslySetInnerHTML={typeof v === 'string' && v.startsWith('<') ? { __html: DOMPurify.sanitize(v) } : undefined}
-                          >
-                            {!(typeof v === 'string' && v.startsWith('<')) ? (typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v ?? '—')) : undefined}
-                          </div>
-                        </div>
-                      ))}
+                      {Object.entries(selectedResponse.answers ?? {}).map(([k, v]) => {
+                        const currentForm = forms.find(f => f._blobId === selectedFormId);
+                        const field = currentForm?.fields.find((f: any) => f.id === k);
+                        
+                        return (
+                          <AnswerItem 
+                            key={k}
+                            label={field?.label || k}
+                            value={v}
+                            fieldType={field?.type}
+                          />
+                        );
+                      })}
                     </div>
                   </div>
 
