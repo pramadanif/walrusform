@@ -91,25 +91,6 @@ export async function appendToWalrusRegistry(entry: WalrusRegistryEntry): Promis
  * walletAddress: if provided, we query Sui for forms registered on-chain.
  */
 export async function getMergedRegistry(walletAddress?: string): Promise<Record<string, FormRegistryEntry>> {
-  // 1. Load localStorage registry (backward compat)
-  const LOCAL_KEY = 'walrusform_registry';
-  let localRegistry: Record<string, FormRegistryEntry> = {};
-  try {
-    localRegistry = JSON.parse(localStorage.getItem(LOCAL_KEY) ?? '{}');
-  } catch { /* ignore */ }
-
-  // 2. Load Walrus index blobs registry
-  const walrusEntries = await loadWalrusRegistry();
-  const walrusRegistry: Record<string, FormRegistryEntry> = {};
-  for (const entry of walrusEntries) {
-    walrusRegistry[entry.blobId] = {
-      title: entry.title,
-      createdAt: entry.createdAt,
-      blobId: entry.blobId,
-    };
-  }
-
-  // 3. Load from Sui blockchain (Discovery Tier)
   const suiRegistry: Record<string, FormRegistryEntry> = {};
   if (walletAddress) {
     try {
@@ -118,7 +99,7 @@ export async function getMergedRegistry(walletAddress?: string): Promise<Record<
         if (form.formBlobId) {
           suiRegistry[form.formBlobId] = {
             title: form.title || "On-chain Form",
-            createdAt: new Date().toISOString(), // Sui objects don't show creation date easily without extra RPC calls
+            createdAt: new Date().toISOString(),
             blobId: form.formBlobId,
           };
         }
@@ -128,8 +109,7 @@ export async function getMergedRegistry(walletAddress?: string): Promise<Record<
     }
   }
 
-  // Precedence: Sui > Walrus > localStorage
-  return { ...localRegistry, ...walrusRegistry, ...suiRegistry };
+  return suiRegistry;
 }
 
 // ─── Submission Index Blobs ───────────────────────────────────────────────────
@@ -163,24 +143,7 @@ export async function loadSubmissionIndex(formBlobId: string): Promise<Submissio
     console.warn('[WalrusRegistry] Failed to load index from Sui:', e);
   }
 
-  // 2. Fallback to local pointer (for forms not yet on Sui or if RPC fails)
-  const pointer = localStorage.getItem(subIndexPointerKey(formBlobId));
-  if (pointer) {
-    try {
-      const raw = await readFromWalrus(pointer);
-      return JSON.parse(raw) as SubmissionIndexEntry[];
-    } catch {
-      console.warn('[WalrusRegistry] Submission index blob unavailable, falling back to legacy.');
-    }
-  }
-
-  // Backward compat: read from old localStorage key
-  const legacyKey = `walrusform_subs_${formBlobId}`;
-  try {
-    return JSON.parse(localStorage.getItem(legacyKey) ?? '[]') as SubmissionIndexEntry[];
-  } catch {
-    return [];
-  }
+  return [];
 }
 
 /**

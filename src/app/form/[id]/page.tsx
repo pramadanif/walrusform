@@ -13,7 +13,8 @@ import { encryptWithSeal } from '@/lib/seal';
 import { RichTextInput } from '@/components/inputs/RichTextInput';
 import { FileUploadInput } from '@/components/inputs/FileUploadInput';
 import { getExplorerUrl } from '@/lib/walrus';
-import { useCurrentAccount } from '@mysten/dapp-kit';
+import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { getFormByBlobId, updateSubmissionIndexTx, getPoolForForm, claimRewardTx } from '@/lib/suiActions';
 import Navbar from '@/components/Navbar';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -27,6 +28,7 @@ interface PageProps {
 export default function PublicFormPage({ params }: PageProps) {
   const { id: blobId } = use(params);
   const account = useCurrentAccount();
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
 
   const [formDef, setFormDef] = useState<FormDefinition | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,6 +41,8 @@ export default function PublicFormPage({ params }: PageProps) {
   const [submittedBlobId, setSubmittedBlobId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const [formObjectId, setFormObjectId] = useState<string | null>(null);
+
   // Load form definition from Walrus on mount
   useEffect(() => {
     if (!blobId) return;
@@ -47,6 +51,12 @@ export default function PublicFormPage({ params }: PageProps) {
       .then(setFormDef)
       .catch((e) => setLoadError(e?.message ?? 'Failed to load form'))
       .finally(() => setLoading(false));
+
+    getFormByBlobId(blobId).then((suiForm) => {
+      if (suiForm?.objectId) {
+        setFormObjectId(suiForm.objectId);
+      }
+    });
   }, [blobId]);
 
   const setAnswer = (fieldId: string, value: unknown) => {
@@ -66,6 +76,11 @@ export default function PublicFormPage({ params }: PageProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formDef) return;
+    if (!account?.address) {
+      setSubmitError('Please connect your wallet to submit this form.');
+      setSubmitting(false);
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     setSubmitStage('preparing');
@@ -88,7 +103,7 @@ export default function PublicFormPage({ params }: PageProps) {
         encrypted = true;
       }
 
-      const { submissionBlobId } = await submitForm(
+      const { submissionBlobId, newIndexBlobId } = await submitForm(
         blobId,
         answersToSubmit,
         mediaToSubmit,
@@ -101,11 +116,48 @@ export default function PublicFormPage({ params }: PageProps) {
             else setSubmitStage(stage);
         }
       );
-      setSubmittedBlobId(submissionBlobId);
+
+      // Update index on-chain if we have the new pointer
+      if (newIndexBlobId) {
+        setSubmitStage('Sui: Updating on-chain index...');
+        try {
+          const suiForm = await getFormByBlobId(blobId);
+          if (suiForm?.objectId) {
+            signAndExecute({
+              transaction: updateSubmissionIndexTx(suiForm.objectId, newIndexBlobId),
+            }, {
+              onSuccess: () => {
+                console.log('[Form] On-chain index updated.');
+                setSubmittedBlobId(submissionBlobId);
+                setSubmitting(false);
+                setSubmitStage('');
+              },
+              onError: (err) => {
+                console.warn('[Form] Failed to update on-chain index:', err);
+                setSubmitError('Failed to update on-chain index. But submission was saved on Walrus.');
+                setSubmitting(false);
+                setSubmitStage('');
+              }
+            });
+          } else {
+            setSubmittedBlobId(submissionBlobId);
+            setSubmitting(false);
+            setSubmitStage('');
+          }
+        } catch (e) {
+          console.warn('[Form] Failed to fetch form object for index update:', e);
+          setSubmittedBlobId(submissionBlobId);
+          setSubmitting(false);
+          setSubmitStage('');
+        }
+      } else {
+        setSubmittedBlobId(submissionBlobId);
+        setSubmitting(false);
+        setSubmitStage('');
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Submission failed';
       setSubmitError(msg);
-    } finally {
       setSubmitting(false);
       setSubmitStage('');
     }
@@ -115,7 +167,7 @@ export default function PublicFormPage({ params }: PageProps) {
   const progress = (Object.keys(answers).length / Math.max(requiredCount, 1)) * 100;
 
   if (submittedBlobId) {
-    return <SuccessState blobId={submittedBlobId} />;
+    return <SuccessState blobId={submittedBlobId} formObjectId={formObjectId || undefined} />;
   }
 
   if (loading) {
@@ -375,8 +427,25 @@ function RatingInput({ onChange }: { onChange: (val: number) => void }) {
   );
 }
 
-function SuccessState({ blobId }: { blobId: string }) {
+function SuccessState({ blobId, formObjectId }: { blobId: string, formObjectId?: string }) {
   const [copied, setCopied] = useState(false);
+  const [poolObjectId, setPoolObjectId] = useState<string | null>(null);
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+
+  useEffect(() => {
+    if (formObjectId) {
+      getPoolForForm(formObjectId).then(setPoolObjectId);
+    }
+  }, [formObjectId]);
+
+  const handleClaim = () => {
+    if (!poolObjectId) return;
+    const tx = claimRewardTx(poolObjectId);
+    signAndExecute({ transaction: tx }, {
+      onSuccess: () => alert('Reward claimed successfully!'),
+      onError: (e) => alert('Failed to claim reward: ' + e.message),
+    });
+  };
 
   const copy = () => {
     navigator.clipboard.writeText(blobId).then(() => {
@@ -438,6 +507,19 @@ function SuccessState({ blobId }: { blobId: string }) {
                 <Button variant="purple" className="w-full !py-4 font-bold shadow-xl">Explorer</Button>
               </a>
             </div>
+
+            {poolObjectId && (
+              <Button
+                variant="primary"
+                onClick={handleClaim}
+                className="w-full !py-4 font-bold !bg-[#4a2e8c] text-white mt-4 shadow-xl flex items-center justify-center"
+              >
+                <div className="flex items-center gap-2">
+                  <svg className="inline-block" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+                  <span>Claim SUI Reward</span>
+                </div>
+              </Button>
+            )}
           </div>
           <div className="absolute -bottom-12 -right-12 w-32 h-32 opacity-10 group-hover:scale-110 transition-transform duration-1000">
             <Image src="/form.png" alt="Mascot" fill className="object-contain" />

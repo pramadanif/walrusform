@@ -55,10 +55,10 @@ This document outlines the architectural and feature roadmap to transform Worm f
 ---
 
 ## 🟣 Phase 4: AI Intelligence Layer (READY)
-**Objective:** Transform raw immutable data into operational intelligence. 
+**Objective:** Transform raw immutable data into operational intelligence using OpenRouter. 
 
 ### 1. Admin / Reviewer Tools
-- [ ] **AI Consensus Engine**: Automatically analyze thousands of submissions to detect recurring pain points.
+- [ ] **AI Consensus Engine**: Automatically analyze thousands of submissions to detect recurring pain points via OpenRouter.
 - [ ] **AI Priority Scoring**: Automatically score submissions based on impact and frequency.
 - [ ] **AI Root Cause Suggestions**: Infer technical root causes from community reports.
 - [ ] **AI Duplicate Detection**: Group similar issues into clusters.
@@ -70,5 +70,15 @@ This document outlines the architectural and feature roadmap to transform Worm f
 
 ---
 
+## 🟡 Phase 5: Tokenomics & Incentives (NEW)
+**Objective:** Drive engagement and high-quality feedback via on-chain rewards.
+
+- [ ] **Incentivized Forms**: Creators can attach a SUI reward pool to their forms.
+- [ ] **Proof of Submission**: Secure verification that a user actually submitted valid feedback before releasing rewards.
+- [ ] **Automated Payouts**: Respondents can claim their share of the reward pool directly from the Sui contract.
+
+---
+
 ## Final Goal
-Worm is now a credible decentralized coordination layer for DAOs and Web3 communities, built on the high-integrity foundation of Sui and Walrus.
+Worm is now a credible decentralized coordination layer for DAOs and Web3 communities, built on the high-integrity foundation of Sui and Walrus, powered by AI intelligence and cryptoeconomic incentives.
+

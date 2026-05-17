@@ -13,19 +13,75 @@ import { getSubmissionsForForm, saveAdminMeta, AdminMeta, FormSubmission } from 
 import { exportSubmissionsToCSV } from '@/lib/csvExport';
 import { getExplorerUrl } from '@/lib/walrus';
 import { decryptWithSeal } from '@/lib/seal';
-import { useCurrentAccount } from '@mysten/dapp-kit';
+import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { getFormByBlobId, getTeamForForm, updateSubmissionMetaTx, getFormsForTeamMember, getFormsByIds } from '@/lib/suiActions';
 import DOMPurify from 'dompurify';
+import { analyzeSubmissions, AIAnalysisResult } from '@/lib/ai';
 
 type Submission = FormSubmission & AdminMeta & { _blobId?: string; _formTitle?: string; _decrypted?: boolean; _sealError?: string };
 
 const STATUS_OPTIONS = ['New', 'In Review', 'Actioned', 'Archived'] as const;
 
+function AnswerItem({ label, value, fieldType }: { label: string, value: any, fieldType?: string }) {
+  const [error, setError] = useState(false);
+  
+  const isBlobId = typeof value === 'string' && /^[a-zA-Z0-9_-]{43,44}$/.test(value);
+  
+  return (
+    <div className="p-6 rounded-[32px] bg-gray-50/50 border border-black/5">
+      <div className="text-[10px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-2">{label}</div>
+      <div className="font-jakarta font-bold text-[15px] text-gray-800 break-words whitespace-pre-wrap">
+        {fieldType === 'video' || (isBlobId && !error) ? (
+          <video 
+            src={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${value}`} 
+            controls 
+            className="w-full max-h-[300px] rounded-2xl mt-2" 
+            onError={() => setError(true)}
+          />
+        ) : fieldType === 'screenshot' || (isBlobId && error) ? (
+          <img 
+            src={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${value}`} 
+            alt={label} 
+            className="w-full max-h-[300px] object-contain rounded-2xl mt-2" 
+            onError={() => setError(true)}
+          />
+        ) : !(typeof value === 'string' && value.startsWith('<')) ? (
+          typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value ?? '—')
+        ) : (
+          <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(value as string) }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
   const [responses, setResponses] = useState<Submission[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<AIAnalysisResult | null>(null);
   const [forms, setForms] = useState<(FormDefinition & { _blobId: string })[]>([]);
   const [selectedFormId, setSelectedFormId] = useState<string | 'all'>('all');
+  const [selectedFormObjectId, setSelectedFormObjectId] = useState<string | null>(null);
+  const [selectedTeamObjectId, setSelectedTeamObjectId] = useState<string | null>(null);
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+
+  useEffect(() => {
+    if (selectedFormId === 'all') {
+      setSelectedFormObjectId(null);
+      setSelectedTeamObjectId(null);
+      return;
+    }
+    
+    getFormByBlobId(selectedFormId).then((suiForm) => {
+      if (suiForm?.objectId) {
+        setSelectedFormObjectId(suiForm.objectId);
+        getTeamForForm(suiForm.objectId).then(setSelectedTeamObjectId);
+      }
+    });
+  }, [selectedFormId]);
+
   const [loadingResponses, setLoadingResponses] = useState(true);
   const [selectedResponse, setSelectedResponse] = useState<Submission | null>(null);
   const [noteInput, setNoteInput] = useState('');
@@ -52,8 +108,21 @@ export default function DashboardPage() {
       try {
         addSyncLog("Querying Sui for decentralized registry...", "sui");
         const registry = await getFormRegistry(account?.address);
-        const formIds = Object.keys(registry);
-        addSyncLog(`Found ${formIds.length} forms on-chain.`, "sui");
+        let formIds = Object.keys(registry);
+        
+        if (account?.address) {
+          addSyncLog("Checking for team invitations...", "sui");
+          const teamFormIds = await getFormsForTeamMember(account.address);
+          if (teamFormIds.length > 0) {
+            addSyncLog(`Found ${teamFormIds.length} team invitations.`, "sui");
+            const teamForms = await getFormsByIds(teamFormIds);
+            const teamFormBlobIds = teamForms.map(f => f.formBlobId).filter(Boolean) as string[];
+            
+            formIds = Array.from(new Set([...formIds, ...teamFormBlobIds]));
+          }
+        }
+        
+        addSyncLog(`Found ${formIds.length} total forms.`, "sui");
 
         if (formIds.length === 0) {
           if (active) setResponses([]);
@@ -161,33 +230,115 @@ export default function DashboardPage() {
   const handleSaveNote = async () => {
     if (!selectedResponse?._blobId) return;
     setSavingNote(true);
-    saveAdminMeta(selectedResponse._blobId, { adminNote: noteInput });
-    setResponses((prev) =>
-      prev.map((r) => r._blobId === selectedResponse._blobId ? { ...r, adminNote: noteInput } : r)
-    );
-    setSelectedResponse((prev) => prev ? { ...prev, adminNote: noteInput } : prev);
-    setSavingNote(false);
-    setSavedNote(true);
-    setTimeout(() => setSavedNote(false), 2000);
+    
+    if (selectedFormObjectId && selectedTeamObjectId) {
+      const tx = updateSubmissionMetaTx(
+        selectedFormObjectId,
+        selectedTeamObjectId,
+        selectedResponse._blobId!,
+        selectedResponse.status || 'New',
+        noteInput
+      );
+      signAndExecute({ transaction: tx }, {
+        onSuccess: () => {
+          setResponses((prev) =>
+            prev.map((r) => r._blobId === selectedResponse._blobId ? { ...r, adminNote: noteInput } : r)
+          );
+          setSelectedResponse((prev) => prev ? { ...prev, adminNote: noteInput } : prev);
+          setSavedNote(true);
+          setTimeout(() => setSavedNote(false), 2000);
+        },
+        onError: (e) => alert('Failed to save note: ' + e.message),
+        onSettled: () => setSavingNote(false),
+      });
+    } else {
+      alert('Form or Team ID not loaded yet. Please wait or refresh.');
+      setSavingNote(false);
+    }
   };
 
   const handleStatusChange = (status: string) => {
     if (!selectedResponse?._blobId) return;
     const s = status as AdminMeta['status'];
-    saveAdminMeta(selectedResponse._blobId, { status: s });
-    setResponses((prev) =>
-      prev.map((r) => r._blobId === selectedResponse._blobId ? { ...r, status: s } : r)
-    );
-    setSelectedResponse((prev) => prev ? { ...prev, status: s } : prev);
+    
+    if (selectedFormObjectId && selectedTeamObjectId) {
+      const tx = updateSubmissionMetaTx(
+        selectedFormObjectId,
+        selectedTeamObjectId,
+        selectedResponse._blobId!,
+        status,
+        selectedResponse.adminNote || ''
+      );
+      signAndExecute({ transaction: tx }, {
+        onSuccess: () => {
+          setResponses((prev) =>
+            prev.map((r) => r._blobId === selectedResponse._blobId ? { ...r, status: s } : r)
+          );
+          setSelectedResponse((prev) => prev ? { ...prev, status: s } : prev);
+        },
+        onError: (e) => alert('Failed to update status: ' + e.message),
+      });
+    } else {
+      alert('Form or Team ID not loaded yet. Please wait or refresh.');
+    }
   };
 
   const handleArchive = () => handleStatusChange('Archived');
+
+  const handleImportForm = async () => {
+    const blobId = prompt('Enter Form Blob ID:');
+    if (!blobId) return;
+    
+    setLoadingResponses(true);
+    try {
+      const form = await loadFormDefinition(blobId);
+      if (form) {
+        setForms(prev => {
+          if (prev.some(f => f._blobId === blobId)) {
+            alert('Form already in list!');
+            return prev;
+          }
+          return [...prev, { ...form, _blobId: blobId }];
+        });
+        
+        const subs = await getSubmissionsForForm(blobId);
+        setResponses(prev => [...prev, ...subs.map(s => ({ ...s, formBlobId: blobId }))]);
+        
+        alert('Form imported successfully!');
+      }
+    } catch (e: any) {
+      alert('Failed to load form: ' + e.message);
+    } finally {
+      setLoadingResponses(false);
+    }
+  };
 
   const handleExportCSV = () => {
     const formToExport = forms.find((f) => f._blobId === selectedFormId) ?? forms[0];
     if (!formToExport) return;
     const subsForForm = responses.filter((r) => r.formBlobId === formToExport._blobId);
     exportSubmissionsToCSV(formToExport, subsForForm);
+  };
+  const runAIAnalysis = async () => {
+    const formToAnalyze = forms.find((f) => f._blobId === selectedFormId) ?? forms[0];
+    if (!formToAnalyze) return;
+    const subsForForm = responses.filter((r) => r.formBlobId === formToAnalyze._blobId);
+    if (subsForForm.length === 0) {
+      alert('No submissions to analyze for this form.');
+      return;
+    }
+    
+    setAiLoading(true);
+    try {
+      const submissionsToAnalyze = subsForForm.map(s => s.answers);
+      const result = await analyzeSubmissions(formToAnalyze.title, submissionsToAnalyze);
+      setAiResult(result);
+    } catch (e) {
+      console.error(e);
+      alert(e instanceof Error ? e.message : 'AI Analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const [now, setNow] = useState(0);
@@ -262,6 +413,17 @@ export default function DashboardPage() {
               <Button variant="ghost" onClick={handleExportCSV} className="shadow-sm border-black/5 !px-8">
                 Export
               </Button>
+              <Button 
+                variant="ghost" 
+                onClick={runAIAnalysis} 
+                className="shadow-sm border-black/5 !px-8 flex items-center gap-2 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200/50 shadow-[0_0_15px_rgba(124,58,237,0.1)] transition-all duration-300"
+                disabled={aiLoading}
+              >
+                {aiLoading && (
+                  <div className="w-4 h-4 border-2 border-[#4a2e8c] border-t-transparent rounded-full animate-spin" />
+                )}
+                <span className="font-outfit font-bold bg-gradient-to-r from-[#4a2e8c] to-[#7c3aed] bg-clip-text text-transparent">AI Insights</span>
+              </Button>
               <Button variant="purple" onClick={() => router.push('/builder')} className="shadow-2xl !px-10">New Session +</Button>
             </motion.div>
           </div>
@@ -277,6 +439,53 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
             {/* Main List */}
             <div className="lg:col-span-2">
+              {aiResult && (
+                <GlassCard className="!p-10 mb-8 !bg-purple-50/50 !border-purple-200/50 !rounded-[32px] shadow-xl">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-[#4a2e8c] rounded-full flex items-center justify-center text-white font-bold text-xs">
+                        AI
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-outfit font-bold text-black">AI Insights</h3>
+                        <p className="text-[10px] font-jakarta text-gray-400 uppercase tracking-widest font-bold">OpenRouter Powered</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setAiResult(null)} className="text-gray-400 hover:text-gray-600">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div>
+                      <p className="font-jakarta text-sm text-gray-700 leading-relaxed">{aiResult.rawSummary}</p>
+                    </div>
+
+                    <div>
+                      <h4 className="text-[11px] font-jakarta font-bold text-[#4a2e8c] uppercase tracking-widest mb-3">Key Consensus Points</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {aiResult.consensusPoints.map((point, i) => (
+                          <span key={i} className="px-4 py-2 bg-white/80 rounded-full border border-purple-100 text-xs font-jakarta font-bold text-gray-700 shadow-sm">
+                            {point}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-[11px] font-jakarta font-bold text-[#4a2e8c] uppercase tracking-widest mb-3">Suggested Actions</h4>
+                      <ul className="space-y-2">
+                        {aiResult.suggestedActions.map((action, i) => (
+                          <li key={i} className="flex items-start gap-3 text-xs font-jakarta text-gray-600">
+                            <span className="text-[#4a2e8c] font-bold">•</span>
+                            {action}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </GlassCard>
+              )}
               <GlassCard className="!p-0 overflow-hidden !bg-white/80 !rounded-[48px] border-white shadow-2xl relative h-full">
                 <div className="p-10 border-b border-black/[0.03] flex justify-between items-center bg-white/40">
                   <h3 className="text-2xl font-outfit font-bold">Recent Submissions</h3>
@@ -377,7 +586,16 @@ export default function DashboardPage() {
                     <h3 className="text-lg font-outfit font-bold text-black">Active Forms</h3>
                     <p className="text-[10px] font-jakarta text-gray-400 uppercase tracking-widest font-bold mt-1">Your deployed sessions</p>
                   </div>
-                  <div className={`w-2 h-2 rounded-full ${forms.length > 0 ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+                  <div className="flex items-center gap-3">
+                    <Button 
+                      variant="ghost" 
+                      onClick={handleImportForm}
+                      className="!py-1.5 !px-3 text-xs font-bold border-black/5 hover:bg-black/5"
+                    >
+                      Import
+                    </Button>
+                    <div className={`w-2 h-2 rounded-full ${forms.length > 0 ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+                  </div>
                 </div>
                 <div className="space-y-4">
                   {forms.length === 0 ? (
@@ -494,16 +712,19 @@ export default function DashboardPage() {
                   <div className="space-y-6">
                     <h4 className="text-[11px] font-jakarta font-bold text-[#4a2e8c] uppercase tracking-[0.2em]">Response Data</h4>
                     <div className="grid grid-cols-1 gap-4">
-                      {Object.entries(selectedResponse.answers ?? {}).map(([k, v]) => (
-                        <div key={k} className="p-6 rounded-[32px] bg-gray-50/50 border border-black/5">
-                          <div className="text-[10px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-2">{k}</div>
-                          <div className="font-jakarta font-bold text-[15px] text-gray-800 break-words whitespace-pre-wrap"
-                                dangerouslySetInnerHTML={typeof v === 'string' && v.startsWith('<') ? { __html: DOMPurify.sanitize(v) } : undefined}
-                          >
-                            {!(typeof v === 'string' && v.startsWith('<')) ? (typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v ?? '—')) : undefined}
-                          </div>
-                        </div>
-                      ))}
+                      {Object.entries(selectedResponse.answers ?? {}).map(([k, v]) => {
+                        const currentForm = forms.find(f => f._blobId === selectedFormId);
+                        const field = currentForm?.fields.find((f: any) => f.id === k);
+                        
+                        return (
+                          <AnswerItem 
+                            key={k}
+                            label={field?.label || k}
+                            value={v}
+                            fieldType={field?.type}
+                          />
+                        );
+                      })}
                     </div>
                   </div>
 

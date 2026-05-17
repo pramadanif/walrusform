@@ -9,8 +9,8 @@ import Image from 'next/image';
 import Navbar from '@/components/Navbar';
 import { saveFormDefinition, FormDefinition, FormField, getSealWallets } from '@/lib/formStorage';
 import { getExplorerUrl, uploadToWalrus } from '@/lib/walrus';
-import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
-import { createFormTx, sealApproveTx } from '@/lib/suiActions';
+import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
+import { createFormTx, setupTeamAndSealTx, createIncentivizedFormTx } from '@/lib/suiActions';
 
 const FIELD_TYPES = [
   { id: 'richtext', label: 'Rich Text', icon: 'T', color: '#cdb4ff' },
@@ -27,6 +27,7 @@ const FIELD_TYPES = [
 
 export default function BuilderPage() {
   const account = useCurrentAccount();
+  const client = useSuiClient();
   const searchParams = useSearchParams();
 
   const initialDraft = useMemo(() => {
@@ -62,14 +63,21 @@ export default function BuilderPage() {
   const [deployedBlobId, setDeployedBlobId] = useState<string | null>(null);
   const [deployStage, setDeployStage] = useState<'idle' | 'walrus' | 'sui'>('idle');
   const [activityLog, setActivityLog] = useState<{msg: string, type: 'seal' | 'walrus' | 'sui' | 'done'}[]>([]);
-  const [sealEnabled, setSealEnabled] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    try { return JSON.parse(localStorage.getItem('walrusform_seal_wallets') ?? '[]').length > 0; } catch { return false; }
-  });
-  const [sealWalletInput, setSealWalletInput] = useState<string>(() => {
-    if (typeof window === 'undefined') return '';
-    try { return (JSON.parse(localStorage.getItem('walrusform_seal_wallets') ?? '[]') as string[]).join('\n'); } catch { return ''; }
-  });
+  const [sealEnabled, setSealEnabled] = useState<boolean>(false);
+  const [sealWalletInput, setSealWalletInput] = useState<string>('');
+
+  React.useEffect(() => {
+    try {
+      const wallets = JSON.parse(localStorage.getItem('walrusform_seal_wallets') ?? '[]');
+      setSealEnabled(wallets.length > 0);
+      setSealWalletInput(wallets.join('\n'));
+    } catch {
+      // ignore
+    }
+  }, []);
+  const [incentivesEnabled, setIncentivesEnabled] = useState(false);
+  const [rewardPerResponse, setRewardPerResponse] = useState('0.1'); // in SUI
+  const [maxResponses, setMaxResponses] = useState('100');
 
   const toggleSeal = (val: boolean) => {
     setSealEnabled(val);
@@ -177,16 +185,35 @@ export default function BuilderPage() {
         
         // Build the allowed decryptors list from current UI state
         const decryptorList = sealWalletInput.split('\n').map(w => w.trim()).filter(Boolean);
+        if (account?.address && !decryptorList.includes(account.address)) {
+          decryptorList.push(account.address);
+        }
         
+        const tx = incentivesEnabled 
+          ? createIncentivizedFormTx(
+              form.title, 
+              blobId, 
+              "", 
+              BigInt(parseFloat(rewardPerResponse) * 1_000_000_000), 
+              parseInt(maxResponses)
+            )
+          : createFormTx(form.title, blobId, "");
+
         signAndExecute({
-          transaction: createFormTx(form.title, blobId, ""),
+          transaction: tx,
         }, {
-          onSuccess: (result) => {
+          onSuccess: async (result) => {
+            addLog("Waiting for transaction confirmation...", "sui");
+            const txData = await client.waitForTransaction({
+              digest: result.digest,
+              options: { showObjectChanges: true },
+            });
+            
             // Extract the formObjectId from the created objects
-            const createdObj = (result as any).objectChanges?.find(
+            const createdObj = txData.objectChanges?.find(
               (o: any) => o.type === 'created' && o.objectType?.includes('::worm::Form')
             );
-            const formObjectId: string | undefined = createdObj?.objectId;
+            const formObjectId = (createdObj as any)?.objectId;
 
             const link = `${window.location.origin}/form/${blobId}`;
             setDeployedBlobId(blobId);
@@ -195,12 +222,12 @@ export default function BuilderPage() {
 
             // If Seal is enabled, register the access policy on-chain
             if (sealEnabled && decryptorList.length > 0 && formObjectId) {
-              addLog(`Registering Seal policy for ${decryptorList.length} decryptor(s)...`, "seal");
+              addLog(`Registering Seal policy and Team for ${decryptorList.length} member(s)...`, "seal");
               signAndExecute({
-                transaction: sealApproveTx(formObjectId, decryptorList),
+                transaction: setupTeamAndSealTx(formObjectId, decryptorList),
               }, {
                 onSuccess: () => {
-                  addLog("Seal policy registered on-chain. ✓", "done");
+                  addLog("Seal policy and Team registered on-chain. ✓", "done");
                   setDeployStage('idle');
                   setIsDeploying(false);
                 },
@@ -543,6 +570,14 @@ export default function BuilderPage() {
                     exit={{ opacity: 0, x: -20 }}
                     className="space-y-8"
                   >
+                    <button
+                      onClick={() => setSelectedFieldId(null)}
+                      className="flex items-center gap-2 text-[11px] font-jakarta font-bold text-[#4a2e8c] uppercase tracking-widest hover:opacity-70 transition-opacity"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                      Back to Form Settings
+                    </button>
+
                     <Input
                       label="Label Text"
                       value={selectedField.label}
@@ -620,15 +655,19 @@ export default function BuilderPage() {
                           </div>
                           <button
                             onClick={() => toggleSeal(!sealEnabled)}
-                            className={`w-14 h-7 rounded-full p-1 transition-all duration-500 ${
-                              sealEnabled ? 'bg-amber-500 shadow-[0_0_12px_rgba(217,119,6,0.4)]' : 'bg-gray-200 shadow-inner'
+                            className={`w-16 h-8 rounded-full p-1 transition-all duration-500 ${
+                              sealEnabled ? 'bg-amber-500 shadow-[0_0_15px_rgba(217,119,6,0.5)]' : 'bg-gray-200 shadow-inner'
                             }`}
                           >
                             <motion.div
-                              animate={{ x: sealEnabled ? 28 : 0 }}
+                              animate={{ x: sealEnabled ? 32 : 0 }}
                               transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                              className="w-5 h-5 rounded-full bg-white shadow-xl"
-                            />
+                              className="w-6 h-6 rounded-full bg-white shadow-lg flex items-center justify-center"
+                            >
+                              {sealEnabled && (
+                                <div className="w-2 h-2 rounded-full bg-amber-500" />
+                              )}
+                            </motion.div>
                           </button>
                         </div>
 
@@ -641,8 +680,8 @@ export default function BuilderPage() {
                               className="overflow-hidden"
                             >
                               <div className="pt-4 border-t border-amber-200/60 mt-4">
-                                <label className="text-[10px] font-jakarta font-bold text-amber-700 uppercase tracking-widest block mb-3">Authorized Decryptors</label>
-                                <p className="text-[10px] text-amber-600/60 font-jakarta mb-3">One wallet address per line. Only these wallets can read submissions.</p>
+                                <label className="text-[10px] font-jakarta font-bold text-amber-700 uppercase tracking-widest block mb-3">Team Members & Authorized Decryptors</label>
+                                <p className="text-[10px] text-amber-600/60 font-jakarta mb-3">One wallet address per line. These wallets will form your team and can read encrypted submissions.</p>
                                 <textarea
                                   value={sealWalletInput}
                                   onChange={(e) => saveSealWallets(e.target.value)}
@@ -655,6 +694,77 @@ export default function BuilderPage() {
                                   <span className="text-[9px] font-jakarta text-amber-600 font-bold uppercase tracking-widest">
                                     {sealWalletInput.split('\n').filter(w => w.trim()).length} wallet(s) authorized
                                   </span>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+
+                    {/* Incentives — Reward Toggle */}
+                    <div>
+                      <h4 className="text-[10px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-6">Incentives</h4>
+                      <div className="p-8 rounded-[32px] border border-green-200/60 bg-green-50/40">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                              <label className="text-[11px] font-jakarta font-bold text-green-700 uppercase tracking-widest">SUI Rewards</label>
+                            </div>
+                            <p className="text-[10px] text-green-600/70 font-jakarta">
+                              {incentivesEnabled ? 'ON — Respondents get paid' : 'OFF — No rewards'}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setIncentivesEnabled(!incentivesEnabled)}
+                            className={`w-16 h-8 rounded-full p-1 transition-all duration-500 ${
+                              incentivesEnabled ? 'bg-green-500 shadow-[0_0_15px_rgba(22,163,74,0.5)]' : 'bg-gray-200 shadow-inner'
+                            }`}
+                          >
+                            <motion.div
+                              animate={{ x: incentivesEnabled ? 32 : 0 }}
+                              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                              className="w-6 h-6 rounded-full bg-white shadow-lg flex items-center justify-center"
+                            >
+                              {incentivesEnabled && (
+                                <div className="w-2 h-2 rounded-full bg-green-500" />
+                              )}
+                            </motion.div>
+                          </button>
+                        </div>
+
+                        <AnimatePresence>
+                          {incentivesEnabled && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="pt-4 border-t border-green-200/60 mt-4 space-y-4">
+                                <div>
+                                  <label className="text-[10px] font-jakarta font-bold text-green-700 uppercase tracking-widest block mb-2">Reward Per Response (SUI)</label>
+                                  <input
+                                    type="number"
+                                    value={rewardPerResponse}
+                                    onChange={(e) => setRewardPerResponse(e.target.value)}
+                                    placeholder="0.1"
+                                    className="w-full bg-white/60 border border-green-200 rounded-[16px] px-4 py-3 font-jakarta font-bold text-sm text-gray-700 outline-none focus:border-green-400 transition-all shadow-inner"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-jakarta font-bold text-green-700 uppercase tracking-widest block mb-2">Max Rewarded Responses</label>
+                                  <input
+                                    type="number"
+                                    value={maxResponses}
+                                    onChange={(e) => setMaxResponses(e.target.value)}
+                                    placeholder="100"
+                                    className="w-full bg-white/60 border border-green-200 rounded-[16px] px-4 py-3 font-jakarta font-bold text-sm text-gray-700 outline-none focus:border-green-400 transition-all shadow-inner"
+                                  />
+                                </div>
+                                <div className="p-3 bg-green-100/50 rounded-[12px] text-[10px] font-jakarta text-green-700 font-bold">
+                                  Total Pool: {(parseFloat(rewardPerResponse) * parseFloat(maxResponses)).toFixed(2)} SUI
                                 </div>
                               </div>
                             </motion.div>

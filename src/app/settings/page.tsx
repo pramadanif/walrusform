@@ -22,6 +22,7 @@ const TABS = [
   { id: 'Profile', icon: <ProfileIcon /> },
   { id: 'Team', icon: <TeamIcon /> },
   { id: 'Encryption (Seal)', icon: <LockIcon /> },
+  { id: 'AI Settings', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 16V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2h14a2 2 0 002-2zM7 12h.01M11 12h.01M15 12h.01"/></svg> },
   { id: 'Notifications', icon: <BellIcon /> },
   { id: 'Export & Data', icon: <DatabaseIcon /> },
   { id: 'Danger Zone', icon: <TrashIcon /> }
@@ -75,6 +76,10 @@ export default function SettingsPage() {
   // Notifications
   const [notifications, setNotifications] = useState(() => getNotifications());
   const [dataMessage, setDataMessage] = useState<string | null>(null);
+  const [openRouterKey, setOpenRouterKey] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem('worm_openrouter_key') ?? '';
+  });
 
   const addSealWallet = () => {
     const w = newWallet.trim();
@@ -299,6 +304,54 @@ export default function SettingsPage() {
                         <Button className="!rounded-full !px-8 !py-3" onClick={addSealWallet}>Add</Button>
                       </div>
                       {sealSaved && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-[11px] font-jakarta font-bold text-green-500 mt-2 px-6">Policy updated successfully ✓</motion.p>}
+                    </div>
+                  </GlassCard>
+                )}
+                {activeTab === 'AI Settings' && (
+                  <GlassCard className="!p-10 !rounded-[40px] !bg-white/90 border-white shadow-xl">
+                    <div className="flex justify-between items-start mb-10">
+                      <div className="space-y-1">
+                        <h2 className="text-3xl font-syne font-extrabold text-black">AI Intelligence</h2>
+                        <p className="text-gray-400 font-jakarta font-bold text-xs uppercase tracking-widest">OpenRouter API Configuration</p>
+                      </div>
+                      <Badge color={openRouterKey ? 'green' : 'gray'}>
+                        {openRouterKey ? 'Configured' : 'Missing Key'}
+                      </Badge>
+                    </div>
+
+                    <p className="text-sm text-gray-500 font-jakarta font-medium leading-relaxed mb-10 max-w-2xl">
+                      Worm uses OpenRouter to provide AI-powered insights on decentralized feedback. 
+                      Your API key is stored strictly in your browser's local storage and is never sent to our servers.
+                    </p>
+
+                    <div className="space-y-6">
+                      <div>
+                        <label className="text-[11px] font-jakarta font-bold text-gray-400 uppercase tracking-widest ml-1 block mb-3">OpenRouter API Key</label>
+                        <div className="flex gap-4 p-2 bg-white rounded-[28px] border border-black/5 shadow-inner">
+                          <input
+                            type="password"
+                            placeholder="sk-or-v1-..."
+                            value={openRouterKey}
+                            onChange={(e) => {
+                              setOpenRouterKey(e.target.value);
+                              localStorage.setItem('worm_openrouter_key', e.target.value);
+                            }}
+                            className="flex-1 bg-transparent border-none outline-none px-6 font-mono text-sm text-black placeholder:text-gray-300"
+                          />
+                          <Button 
+                            className="!rounded-full !px-8 !py-3" 
+                            onClick={() => {
+                              localStorage.setItem('worm_openrouter_key', openRouterKey);
+                              alert('API Key saved to local storage.');
+                            }}
+                          >
+                            Save
+                          </Button>
+                        </div>
+                        <p className="text-[10px] text-gray-400 font-jakarta mt-2 ml-1">
+                          Get a key from <a href="https://openrouter.ai/" target="_blank" rel="noopener noreferrer" className="text-[#4a2e8c] underline">openrouter.ai</a>. We recommend using free models like `google/gemini-2.0-flash-exp:free`.
+                        </p>
+                      </div>
                     </div>
                   </GlassCard>
                 )}
