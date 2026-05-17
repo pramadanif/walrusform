@@ -14,7 +14,7 @@ import { RichTextInput } from '@/components/inputs/RichTextInput';
 import { FileUploadInput } from '@/components/inputs/FileUploadInput';
 import { getExplorerUrl } from '@/lib/walrus';
 import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
-import { getFormByBlobId, updateSubmissionIndexTx } from '@/lib/suiActions';
+import { getFormByBlobId, updateSubmissionIndexTx, getPoolForForm, claimRewardTx } from '@/lib/suiActions';
 import Navbar from '@/components/Navbar';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -41,6 +41,8 @@ export default function PublicFormPage({ params }: PageProps) {
   const [submittedBlobId, setSubmittedBlobId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const [formObjectId, setFormObjectId] = useState<string | null>(null);
+
   // Load form definition from Walrus on mount
   useEffect(() => {
     if (!blobId) return;
@@ -49,6 +51,12 @@ export default function PublicFormPage({ params }: PageProps) {
       .then(setFormDef)
       .catch((e) => setLoadError(e?.message ?? 'Failed to load form'))
       .finally(() => setLoading(false));
+
+    getFormByBlobId(blobId).then((suiForm) => {
+      if (suiForm?.objectId) {
+        setFormObjectId(suiForm.objectId);
+      }
+    });
   }, [blobId]);
 
   const setAnswer = (fieldId: string, value: unknown) => {
@@ -159,7 +167,7 @@ export default function PublicFormPage({ params }: PageProps) {
   const progress = (Object.keys(answers).length / Math.max(requiredCount, 1)) * 100;
 
   if (submittedBlobId) {
-    return <SuccessState blobId={submittedBlobId} />;
+    return <SuccessState blobId={submittedBlobId} formObjectId={formObjectId || undefined} />;
   }
 
   if (loading) {
@@ -419,8 +427,25 @@ function RatingInput({ onChange }: { onChange: (val: number) => void }) {
   );
 }
 
-function SuccessState({ blobId }: { blobId: string }) {
+function SuccessState({ blobId, formObjectId }: { blobId: string, formObjectId?: string }) {
   const [copied, setCopied] = useState(false);
+  const [poolObjectId, setPoolObjectId] = useState<string | null>(null);
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+
+  useEffect(() => {
+    if (formObjectId) {
+      getPoolForForm(formObjectId).then(setPoolObjectId);
+    }
+  }, [formObjectId]);
+
+  const handleClaim = () => {
+    if (!poolObjectId) return;
+    const tx = claimRewardTx(poolObjectId);
+    signAndExecute({ transaction: tx }, {
+      onSuccess: () => alert('Reward claimed successfully!'),
+      onError: (e) => alert('Failed to claim reward: ' + e.message),
+    });
+  };
 
   const copy = () => {
     navigator.clipboard.writeText(blobId).then(() => {
@@ -482,6 +507,16 @@ function SuccessState({ blobId }: { blobId: string }) {
                 <Button variant="purple" className="w-full !py-4 font-bold shadow-xl">Explorer</Button>
               </a>
             </div>
+
+            {poolObjectId && (
+              <Button
+                variant="primary"
+                onClick={handleClaim}
+                className="w-full !py-4 font-bold !bg-[#4a2e8c] text-white mt-4 shadow-xl flex items-center justify-center gap-2"
+              >
+                <span>🎁</span> Claim SUI Reward
+              </Button>
+            )}
           </div>
           <div className="absolute -bottom-12 -right-12 w-32 h-32 opacity-10 group-hover:scale-110 transition-transform duration-1000">
             <Image src="/form.png" alt="Mascot" fill className="object-contain" />

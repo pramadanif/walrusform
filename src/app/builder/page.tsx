@@ -9,7 +9,7 @@ import Image from 'next/image';
 import Navbar from '@/components/Navbar';
 import { saveFormDefinition, FormDefinition, FormField, getSealWallets } from '@/lib/formStorage';
 import { getExplorerUrl, uploadToWalrus } from '@/lib/walrus';
-import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
 import { createFormTx, setupTeamAndSealTx, createIncentivizedFormTx } from '@/lib/suiActions';
 
 const FIELD_TYPES = [
@@ -27,6 +27,7 @@ const FIELD_TYPES = [
 
 export default function BuilderPage() {
   const account = useCurrentAccount();
+  const client = useSuiClient();
   const searchParams = useSearchParams();
 
   const initialDraft = useMemo(() => {
@@ -194,12 +195,18 @@ export default function BuilderPage() {
         signAndExecute({
           transaction: tx,
         }, {
-          onSuccess: (result) => {
+          onSuccess: async (result) => {
+            addLog("Waiting for transaction confirmation...", "sui");
+            const txData = await client.waitForTransaction({
+              digest: result.digest,
+              options: { showObjectChanges: true },
+            });
+            
             // Extract the formObjectId from the created objects
-            const createdObj = (result as any).objectChanges?.find(
+            const createdObj = txData.objectChanges?.find(
               (o: any) => o.type === 'created' && o.objectType?.includes('::worm::Form')
             );
-            const formObjectId: string | undefined = createdObj?.objectId;
+            const formObjectId = (createdObj as any)?.objectId;
 
             const link = `${window.location.origin}/form/${blobId}`;
             setDeployedBlobId(blobId);
@@ -666,8 +673,8 @@ export default function BuilderPage() {
                               className="overflow-hidden"
                             >
                               <div className="pt-4 border-t border-amber-200/60 mt-4">
-                                <label className="text-[10px] font-jakarta font-bold text-amber-700 uppercase tracking-widest block mb-3">Authorized Decryptors</label>
-                                <p className="text-[10px] text-amber-600/60 font-jakarta mb-3">One wallet address per line. Only these wallets can read submissions.</p>
+                                <label className="text-[10px] font-jakarta font-bold text-amber-700 uppercase tracking-widest block mb-3">Team Members & Authorized Decryptors</label>
+                                <p className="text-[10px] text-amber-600/60 font-jakarta mb-3">One wallet address per line. These wallets will form your team and can read encrypted submissions.</p>
                                 <textarea
                                   value={sealWalletInput}
                                   onChange={(e) => saveSealWallets(e.target.value)}

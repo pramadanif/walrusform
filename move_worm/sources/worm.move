@@ -58,6 +58,13 @@ module move_worm_v2::worm {
     public struct TeamCreated has copy, drop {
         form_id: address,
         team_id: address,
+        members: vector<address>,
+    }
+
+    /// Event emitted when an incentive pool is created
+    public struct PoolCreated has copy, drop {
+        form_id: address,
+        pool_id: address,
     }
 
     // --- Seal SDK Compatibility ---
@@ -119,6 +126,7 @@ module move_worm_v2::worm {
         transfer::share_object(form);
 
         let pool_id = object::new(ctx);
+        let pool_id_addr = object::uid_to_address(&pool_id);
         let pool = IncentivePool {
             id: pool_id,
             form_id: form_id_addr,
@@ -133,6 +141,11 @@ module move_worm_v2::worm {
             form_id: form_id_addr,
             creator: sender,
             form_blob_id,
+        });
+
+        event::emit(PoolCreated {
+            form_id: form_id_addr,
+            pool_id: pool_id_addr,
         });
     }
 
@@ -153,6 +166,7 @@ module move_worm_v2::worm {
         event::emit(TeamCreated {
             form_id: form_id_addr,
             team_id: team_id_addr,
+            members: copy members,
         });
     }
 

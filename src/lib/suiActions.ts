@@ -161,6 +161,75 @@ export async function getOwnedForms(address: string) {
 }
 
 /**
+ * Fetches Form objects by their IDs.
+ */
+export async function getFormsByIds(ids: string[]) {
+  if (ids.length === 0) return [];
+  const objects = await client.multiGetObjects({
+    ids,
+    options: { showContent: true },
+  });
+
+  return objects.map((obj: any) => {
+    const content = obj.data?.content as any;
+    return {
+      objectId: obj.data?.objectId,
+      title: content?.fields?.title,
+      formBlobId: content?.fields?.form_blob_id,
+      latestSubmissionIndexBlobId: content?.fields?.latest_submission_index_blob_id,
+    };
+  });
+}
+
+/**
+ * Queries the blockchain for the IncentivePool object ID for a specific Form.
+ */
+export async function getPoolForForm(formObjectId: string): Promise<string | null> {
+  const response = await client.queryEvents({
+    query: {
+      MoveEventType: `${WORM_PACKAGE_ID}::${WORM_MODULE}::PoolCreated`,
+    },
+  });
+  
+  const event = response.data.find((e: any) => (e.parsedJson as any)?.form_id === formObjectId);
+  return event ? (event.parsedJson as any)?.pool_id : null;
+}
+
+/**
+ * Queries the blockchain for the Team object ID for a specific Form.
+ */
+export async function getTeamForForm(formObjectId: string): Promise<string | null> {
+  const response = await client.queryEvents({
+    query: {
+      MoveEventType: `${WORM_PACKAGE_ID}::${WORM_MODULE}::TeamCreated`,
+    },
+  });
+  
+  const event = response.data.find((e: any) => (e.parsedJson as any)?.form_id === formObjectId);
+  return event ? (event.parsedJson as any)?.team_id : null;
+}
+
+/**
+ * Queries the blockchain for Form IDs where the given address is a team member.
+ */
+export async function getFormsForTeamMember(address: string): Promise<string[]> {
+  const response = await client.queryEvents({
+    query: {
+      MoveEventType: `${WORM_PACKAGE_ID}::${WORM_MODULE}::TeamCreated`,
+    },
+  });
+  
+  const formIds: string[] = [];
+  response.data.forEach((e: any) => {
+    const parsed = e.parsedJson as any;
+    if (parsed.members && parsed.members.some((m: string) => m.toLowerCase() === address.toLowerCase())) {
+      formIds.push(parsed.form_id);
+    }
+  });
+  return formIds;
+}
+
+/**
  * Queries the blockchain for a specific Form object by its Walrus blob ID.
  */
 export async function getFormByBlobId(blobId: string) {
@@ -242,13 +311,12 @@ export function createIncentivizedFormTx(
  * formObjectId: the IncentivizedForm shared object ID.
  * submissionBlobId: proof of submission on Walrus.
  */
-export function claimRewardTx(formObjectId: string, submissionBlobId: string) {
+export function claimRewardTx(poolObjectId: string) {
   const tx = new Transaction();
   tx.moveCall({
     target: `${WORM_PACKAGE_ID}::${WORM_MODULE}::claim_reward`,
     arguments: [
-      tx.object(formObjectId),
-      tx.pure.string(submissionBlobId),
+      tx.object(poolObjectId),
     ],
   });
   return tx;

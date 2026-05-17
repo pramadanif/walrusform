@@ -13,7 +13,8 @@ import { getSubmissionsForForm, saveAdminMeta, AdminMeta, FormSubmission } from 
 import { exportSubmissionsToCSV } from '@/lib/csvExport';
 import { getExplorerUrl } from '@/lib/walrus';
 import { decryptWithSeal } from '@/lib/seal';
-import { useCurrentAccount } from '@mysten/dapp-kit';
+import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { getFormByBlobId, getTeamForForm, updateSubmissionMetaTx, getFormsForTeamMember, getFormsByIds } from '@/lib/suiActions';
 import DOMPurify from 'dompurify';
 import { analyzeSubmissions, AIAnalysisResult } from '@/lib/ai';
 
@@ -29,6 +30,25 @@ export default function DashboardPage() {
   const [aiResult, setAiResult] = useState<AIAnalysisResult | null>(null);
   const [forms, setForms] = useState<(FormDefinition & { _blobId: string })[]>([]);
   const [selectedFormId, setSelectedFormId] = useState<string | 'all'>('all');
+  const [selectedFormObjectId, setSelectedFormObjectId] = useState<string | null>(null);
+  const [selectedTeamObjectId, setSelectedTeamObjectId] = useState<string | null>(null);
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+
+  useEffect(() => {
+    if (selectedFormId === 'all') {
+      setSelectedFormObjectId(null);
+      setSelectedTeamObjectId(null);
+      return;
+    }
+    
+    getFormByBlobId(selectedFormId).then((suiForm) => {
+      if (suiForm?.objectId) {
+        setSelectedFormObjectId(suiForm.objectId);
+        getTeamForForm(suiForm.objectId).then(setSelectedTeamObjectId);
+      }
+    });
+  }, [selectedFormId]);
+
   const [loadingResponses, setLoadingResponses] = useState(true);
   const [selectedResponse, setSelectedResponse] = useState<Submission | null>(null);
   const [noteInput, setNoteInput] = useState('');
@@ -55,8 +75,21 @@ export default function DashboardPage() {
       try {
         addSyncLog("Querying Sui for decentralized registry...", "sui");
         const registry = await getFormRegistry(account?.address);
-        const formIds = Object.keys(registry);
-        addSyncLog(`Found ${formIds.length} forms on-chain.`, "sui");
+        let formIds = Object.keys(registry);
+        
+        if (account?.address) {
+          addSyncLog("Checking for team invitations...", "sui");
+          const teamFormIds = await getFormsForTeamMember(account.address);
+          if (teamFormIds.length > 0) {
+            addSyncLog(`Found ${teamFormIds.length} team invitations.`, "sui");
+            const teamForms = await getFormsByIds(teamFormIds);
+            const teamFormBlobIds = teamForms.map(f => f.formBlobId).filter(Boolean) as string[];
+            
+            formIds = Array.from(new Set([...formIds, ...teamFormBlobIds]));
+          }
+        }
+        
+        addSyncLog(`Found ${formIds.length} total forms.`, "sui");
 
         if (formIds.length === 0) {
           if (active) setResponses([]);
@@ -164,27 +197,88 @@ export default function DashboardPage() {
   const handleSaveNote = async () => {
     if (!selectedResponse?._blobId) return;
     setSavingNote(true);
-    saveAdminMeta(selectedResponse._blobId, { adminNote: noteInput });
-    setResponses((prev) =>
-      prev.map((r) => r._blobId === selectedResponse._blobId ? { ...r, adminNote: noteInput } : r)
-    );
-    setSelectedResponse((prev) => prev ? { ...prev, adminNote: noteInput } : prev);
-    setSavingNote(false);
-    setSavedNote(true);
-    setTimeout(() => setSavedNote(false), 2000);
+    
+    if (selectedFormObjectId && selectedTeamObjectId) {
+      const tx = updateSubmissionMetaTx(
+        selectedFormObjectId,
+        selectedTeamObjectId,
+        selectedResponse._blobId!,
+        selectedResponse.status || 'New',
+        noteInput
+      );
+      signAndExecute({ transaction: tx }, {
+        onSuccess: () => {
+          setResponses((prev) =>
+            prev.map((r) => r._blobId === selectedResponse._blobId ? { ...r, adminNote: noteInput } : r)
+          );
+          setSelectedResponse((prev) => prev ? { ...prev, adminNote: noteInput } : prev);
+          setSavedNote(true);
+          setTimeout(() => setSavedNote(false), 2000);
+        },
+        onError: (e) => alert('Failed to save note: ' + e.message),
+        onSettled: () => setSavingNote(false),
+      });
+    } else {
+      alert('Form or Team ID not loaded yet. Please wait or refresh.');
+      setSavingNote(false);
+    }
   };
 
   const handleStatusChange = (status: string) => {
     if (!selectedResponse?._blobId) return;
     const s = status as AdminMeta['status'];
-    saveAdminMeta(selectedResponse._blobId, { status: s });
-    setResponses((prev) =>
-      prev.map((r) => r._blobId === selectedResponse._blobId ? { ...r, status: s } : r)
-    );
-    setSelectedResponse((prev) => prev ? { ...prev, status: s } : prev);
+    
+    if (selectedFormObjectId && selectedTeamObjectId) {
+      const tx = updateSubmissionMetaTx(
+        selectedFormObjectId,
+        selectedTeamObjectId,
+        selectedResponse._blobId!,
+        status,
+        selectedResponse.adminNote || ''
+      );
+      signAndExecute({ transaction: tx }, {
+        onSuccess: () => {
+          setResponses((prev) =>
+            prev.map((r) => r._blobId === selectedResponse._blobId ? { ...r, status: s } : r)
+          );
+          setSelectedResponse((prev) => prev ? { ...prev, status: s } : prev);
+        },
+        onError: (e) => alert('Failed to update status: ' + e.message),
+      });
+    } else {
+      alert('Form or Team ID not loaded yet. Please wait or refresh.');
+    }
   };
 
   const handleArchive = () => handleStatusChange('Archived');
+
+  const handleImportForm = async () => {
+    const blobId = prompt('Enter Form Blob ID:');
+    if (!blobId) return;
+    
+    setLoadingResponses(true);
+    try {
+      const form = await loadFormDefinition(blobId);
+      if (form) {
+        setForms(prev => {
+          if (prev.some(f => f._blobId === blobId)) {
+            alert('Form already in list!');
+            return prev;
+          }
+          return [...prev, { ...form, _blobId: blobId }];
+        });
+        
+        const subs = await getSubmissionsForForm(blobId);
+        setResponses(prev => [...prev, ...subs.map(s => ({ ...s, formBlobId: blobId }))]);
+        
+        alert('Form imported successfully!');
+      }
+    } catch (e: any) {
+      alert('Failed to load form: ' + e.message);
+    } finally {
+      setLoadingResponses(false);
+    }
+  };
 
   const handleExportCSV = () => {
     const formToExport = forms.find((f) => f._blobId === selectedFormId) ?? forms[0];
@@ -459,7 +553,16 @@ export default function DashboardPage() {
                     <h3 className="text-lg font-outfit font-bold text-black">Active Forms</h3>
                     <p className="text-[10px] font-jakarta text-gray-400 uppercase tracking-widest font-bold mt-1">Your deployed sessions</p>
                   </div>
-                  <div className={`w-2 h-2 rounded-full ${forms.length > 0 ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+                  <div className="flex items-center gap-3">
+                    <Button 
+                      variant="ghost" 
+                      onClick={handleImportForm}
+                      className="!py-1.5 !px-3 text-xs font-bold border-black/5 hover:bg-black/5"
+                    >
+                      Import
+                    </Button>
+                    <div className={`w-2 h-2 rounded-full ${forms.length > 0 ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+                  </div>
                 </div>
                 <div className="space-y-4">
                   {forms.length === 0 ? (

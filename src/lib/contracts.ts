@@ -1,4 +1,4 @@
-export const WORM_PACKAGE_ID = "0x429ecd5000852ddee591fb62c1adaaa9eadacc9317c421527843102a3906ad9c";
+export const WORM_PACKAGE_ID = "0xd860dc04d3dd243d1a7df6c4a603fb9e211c8f80d42af74355e7f907984f820b";
 export const WORM_MODULE = "worm";
 
 export const WORM_FUNCTIONS = {
