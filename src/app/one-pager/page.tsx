@@ -124,7 +124,7 @@ export default function OnePagerPage() {
                   Lock SUI tokens into an on-chain escrow pool when creating a form. Every user who completes it can claim a reward instantly — a feature fundamentally impossible to build natively in Google Forms or Typeform.
                 </p>
                 <div className="text-sm font-jakarta text-white/50 border border-white/10 inline-block px-4 py-2 rounded-full bg-white/5">
-                  Powered by custom <strong className="text-white">worm.move</strong> contract on Sui Testnet
+                  Powered by custom <strong className="text-white">worm.move</strong> contract on Sui Mainnet
                 </div>
               </div>
 
@@ -312,7 +312,7 @@ export default function OnePagerPage() {
                 <div className="text-5xl font-syne font-extrabold text-[#cdb4ff] mb-2">100%</div>
                 <div className="text-xs font-bold uppercase tracking-wider text-[#a0a0a0] mb-4">Criteria Compliant</div>
                 <p className="text-sm text-[#a0a0a0] font-jakarta leading-relaxed">
-                  Every requested dashboard feature — filtering, notes, prioritization, exporting, and AI analysis — has been successfully implemented and tested on the Sui Testnet.
+                  Every requested dashboard feature — filtering, notes, prioritization, exporting, and AI analysis — has been successfully implemented and tested on the Sui Mainnet.
                 </p>
               </div>
             </div>
