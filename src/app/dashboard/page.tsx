@@ -29,27 +29,40 @@ function AnswerItem({ label, value, fieldType }: { label: string, value: any, fi
   const isBlobId = typeof value === 'string' && /^[a-zA-Z0-9_-]{43,44}$/.test(value);
   
   return (
-    <div className="p-6 rounded-[32px] bg-gray-50/50 border border-black/5">
-      <div className="text-[10px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-2">{label}</div>
-      <div className="font-jakarta font-bold text-[15px] text-gray-800 break-words whitespace-pre-wrap">
+    <div className="p-6 rounded-[24px] bg-white border border-gray-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_30px_-4px_rgba(0,0,0,0.1)] transition-all">
+      <div className="text-[11px] font-jakarta font-extrabold text-[#4a2e8c] uppercase tracking-wider mb-2">{label}</div>
+      <div className="font-jakarta font-medium text-[15px] text-gray-900 break-words whitespace-pre-wrap">
         {fieldType === 'video' || (isBlobId && !error) ? (
-          <video 
-            src={`${WALRUS_AGGREGATOR}/v1/blobs/${value}`} 
-            controls 
-            className="w-full max-h-[300px] rounded-2xl mt-2" 
-            onError={() => setError(true)}
-          />
+          <div className="mt-2 rounded-2xl overflow-hidden border border-gray-100">
+            <video 
+              src={`${WALRUS_AGGREGATOR}/v1/blobs/${value}`} 
+              controls 
+              className="w-full max-h-[300px]" 
+              onError={() => setError(true)}
+            />
+          </div>
         ) : fieldType === 'screenshot' || (isBlobId && error) ? (
-          <img 
-            src={`${WALRUS_AGGREGATOR}/v1/blobs/${value}`} 
-            alt={label} 
-            className="w-full max-h-[300px] object-contain rounded-2xl mt-2" 
-            onError={() => setError(true)}
-          />
+          <div className="mt-2 rounded-2xl overflow-hidden border border-gray-100 bg-gray-50 p-2">
+            <img 
+              src={`${WALRUS_AGGREGATOR}/v1/blobs/${value}`} 
+              alt={label} 
+              className="w-full max-h-[300px] object-contain mx-auto" 
+              onError={() => setError(true)}
+            />
+          </div>
         ) : !(typeof value === 'string' && value.startsWith('<')) ? (
-          typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value ?? '—')
+          typeof value === 'boolean' ? (
+            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${value ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+              {value ? 'Yes' : 'No'}
+            </span>
+          ) : (
+            <span className="text-gray-800">{String(value ?? '—')}</span>
+          )
         ) : (
-          <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(value as string) }} />
+          <div 
+            className="prose prose-sm max-w-none mt-1 text-gray-700"
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(value as string) }} 
+          />
         )}
       </div>
     </div>
@@ -1056,8 +1069,8 @@ function StatCard({ label, value, icon, color }: { label: string; value: string;
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-4">
-      <label className="text-[11px] font-jakarta font-bold text-[#4a2e8c] uppercase tracking-[0.2em] block">{label}</label>
-      <div className="text-[16px] text-gray-800 font-jakarta font-bold bg-gray-50/50 border border-black/[0.03] rounded-[32px] p-8 shadow-inner whitespace-pre-wrap break-words">
+      <label className="text-[11px] font-jakarta font-extrabold text-[#4a2e8c] uppercase tracking-wider block">{label}</label>
+      <div className="text-[15px] text-gray-900 font-jakarta font-medium bg-white border border-gray-100 rounded-[24px] p-6 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] whitespace-pre-wrap break-words">
         {value}
       </div>
     </div>

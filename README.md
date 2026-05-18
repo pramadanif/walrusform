@@ -908,6 +908,29 @@ Our custom infrastructure can be accessed at:
 - **Aggregator**: `https://walrus.********.site/v1/blobs/<blob_id>`
 - **API Docs**: `https://walrus.********.site/v1/api`
 
+### Real Response Example
+
+You can view a real response stored on Walrus Mainnet here:
+- **Walruscan Blob**: [SUkSRv_4joqBOg2jcoFt1Pk5HLPbeulM_C3T33W2Cuc](https://walruscan.com/mainnet/blob/SUkSRv_4joqBOg2jcoFt1Pk5HLPbeulM_C3T33W2Cuc)
+
+### Authorized Decryptors (Seal)
+
+To prove that we have granted access to the Walrus team for evaluating the encrypted responses, here is the transaction where we added the Walrus team wallet as an authorized decryptor via Seal:
+- **Transaction**: [FVxz6QzD8V4gtTg9ftVWWCfeZzBkB6iVsBn6JSjwk4gH](https://suiscan.xyz/mainnet/tx/FVxz6QzD8V4gtTg9ftVWWCfeZzBkB6iVsBn6JSjwk4gH)
+- **Walrus Team Wallet**: `0xc4d6ee019649edba41d5a5ed1081fe3c86afc41fea413195dd6ecdd0f6090e54`
+
+### Admin Tutorial: Adding Team Members (Decryptors)
+
+To grant a team member access to view encrypted responses for a specific form, follow these steps:
+
+1. **Filter/Select the Form**: In the Admin Dashboard, use the filter dropdown to **select the specific form** you want to manage. Access is granted on a per-form basis.
+2. **Open Decryptor Settings**: Go to the form's settings or "Authorized Decryptors" section.
+3. **Add Wallet**: Enter the Sui wallet address of your team member.
+4. **Authorize**: Click "Add Decryptor" and sign the transaction on Sui. This registers the address on-chain as an authorized reader for that specific form's encrypted blobs on Walrus.
+
+> [!IMPORTANT]
+> You must filter and select the correct form first before adding a decryptor, as the authorization is bound to that specific form's ID on the blockchain.
+
 ---
 
 ## Contributing

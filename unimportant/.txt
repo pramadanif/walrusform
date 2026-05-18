@@ -1,0 +1,8 @@
+docker run -d \
+  --name walrus-publisher \
+  -e MODE=publisher \
+  -e NETWORK=mainnet \
+  -e SUI_KEYSTORE="['suiprivkey1qytkckkxjg4n8mstmdkwg90x6vw2gp5kv6njsys9xgwpva49nyaqctexq74']" \
+  -v ~/walrus-data/wallets:/wallets \
+  -p 31415:31415 \
+  cmdoss/walrus
