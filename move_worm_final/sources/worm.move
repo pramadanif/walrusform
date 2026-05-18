@@ -4,6 +4,9 @@ module move_worm_v2::worm {
     use sui::transfer;
     use sui::event;
     use sui::dynamic_field;
+    use sui::balance::{Self, Balance};
+    use sui::sui::SUI;
+    use sui::coin::{Self, Coin};
     use std::string::{String};
     use std::vector;
 
@@ -24,6 +27,17 @@ module move_worm_v2::worm {
         rank: u8,
     }
 
+    /// Key for incentive pool dynamic field
+    public struct IncentivePoolKey has copy, drop, store {}
+
+    /// Struct to store in dynamic fields for incentives
+    public struct IncentivePool has store {
+        balance: Balance<SUI>,
+        reward_per_response: u64,
+        max_responses: u64,
+        current_responses: u64,
+    }
+
     /// Event emitted when a form is registered
     public struct FormCreated has copy, drop {
         form_id: address,
@@ -35,6 +49,12 @@ module move_worm_v2::worm {
     public struct SubmissionIndexUpdated has copy, drop {
         form_id: address,
         new_index_blob_id: String,
+    }
+
+    /// Event emitted when a pool is registered (for compatibility)
+    public struct PoolCreated has copy, drop {
+        form_id: address,
+        pool_id: address,
     }
 
     /// Event emitted when a team is registered
@@ -88,6 +108,67 @@ module move_worm_v2::worm {
             creator: sender,
             form_blob_id,
         });
+    }
+
+    public entry fun create_incentivized_form(
+        title: String,
+        form_blob_id: String,
+        submission_index_blob_id: String,
+        reward_coin: Coin<SUI>,
+        reward_per_response: u64,
+        max_responses: u64,
+        ctx: &mut TxContext
+    ) {
+        let sender = tx_context::sender(ctx);
+        let id = object::new(ctx);
+        let form_id_addr = object::uid_to_address(&id);
+        
+        let mut form = Form {
+            id,
+            title,
+            form_blob_id,
+            latest_submission_index_blob_id: submission_index_blob_id,
+            creator: sender,
+            team_members: vector::singleton(sender),
+        };
+
+        let balance = coin::into_balance(reward_coin);
+        let pool = IncentivePool {
+            balance,
+            reward_per_response,
+            max_responses,
+            current_responses: 0,
+        };
+
+        dynamic_field::add(&mut form.id, IncentivePoolKey {}, pool);
+
+        transfer::share_object(form);
+
+        event::emit(FormCreated {
+            form_id: form_id_addr,
+            creator: sender,
+            form_blob_id,
+        });
+
+        event::emit(PoolCreated {
+            form_id: form_id_addr,
+            pool_id: form_id_addr,
+        });
+    }
+
+    public entry fun claim_reward(
+        form: &mut Form,
+        ctx: &mut TxContext
+    ) {
+        let pool = dynamic_field::borrow_mut<IncentivePoolKey, IncentivePool>(&mut form.id, IncentivePoolKey {});
+        assert!(pool.current_responses < pool.max_responses, 0);
+        
+        let reward = pool.reward_per_response;
+        assert!(balance::value(&pool.balance) >= reward, 1);
+        
+        pool.current_responses = pool.current_responses + 1;
+        let coin = coin::from_balance(balance::split(&mut pool.balance, reward), ctx);
+        transfer::public_transfer(coin, tx_context::sender(ctx));
     }
 
     public entry fun update_submission_index(

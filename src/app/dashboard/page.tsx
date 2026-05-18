@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useEffect } from 'react';
-import { GlassCard, Button, Badge } from '@/components/ui';
+import { GlassCard, Button, Badge, Modal } from '@/components/ui';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import AppBackground from '@/components/AppBackground';
@@ -88,6 +88,29 @@ export default function DashboardPage() {
   const [rankInput, setRankInput] = useState(0);
   const [savingNote, setSavingNote] = useState(false);
   const [savedNote, setSavedNote] = useState(false);
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+  
+  const showModal = (title: string, message: string) => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setModalOpen(true);
+  };
+
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [promptTitle, setPromptTitle] = useState('');
+  const [promptValue, setPromptValue] = useState('');
+  const [onPromptConfirm, setOnPromptConfirm] = useState<(val: string) => void>(() => (val: string) => {});
+
+  const showPrompt = (title: string, onConfirm: (val: string) => void) => {
+    setPromptTitle(title);
+    setPromptValue('');
+    setOnPromptConfirm(() => onConfirm);
+    setPromptOpen(true);
+  };
+
   const [searchQuery, setSearchQuery] = useState('');
   const router = useRouter();
   const account = useCurrentAccount();
@@ -260,11 +283,11 @@ export default function DashboardPage() {
           setSavedNote(true);
           setTimeout(() => setSavedNote(false), 2000);
         },
-        onError: (e) => alert('Failed to save note: ' + e.message),
+        onError: (e) => showModal('Error', 'Failed to save note: ' + e.message),
         onSettled: () => setSavingNote(false),
       });
     } else {
-      alert('Form or Team ID not loaded yet. Please wait or refresh.');
+      showModal('Notice', 'Form ID not loaded yet. Please wait or refresh.');
       setSavingNote(false);
     }
   };
@@ -288,10 +311,10 @@ export default function DashboardPage() {
           );
           setSelectedResponse((prev) => prev ? { ...prev, status: s } : prev);
         },
-        onError: (e) => alert('Failed to update status: ' + e.message),
+        onError: (e) => showModal('Error', 'Failed to update status: ' + e.message),
       });
     } else {
-      alert('Form or Team ID not loaded yet. Please wait or refresh.');
+      showModal('Notice', 'Form ID not loaded yet. Please wait or refresh.');
     }
   };
 
@@ -314,41 +337,42 @@ export default function DashboardPage() {
           );
           setSelectedResponse((prev) => prev ? { ...prev, rank: rank } : prev);
         },
-        onError: (e) => alert('Failed to save rank: ' + e.message),
+        onError: (e) => showModal('Error', 'Failed to save rank: ' + e.message),
       });
     } else {
-      alert('Form or Team ID not loaded yet. Please wait or refresh.');
+      showModal('Notice', 'Form ID not loaded yet. Please wait or refresh.');
     }
   };
 
   const handleArchive = () => handleStatusChange('Archived');
 
-  const handleImportForm = async () => {
-    const blobId = prompt('Enter Form Blob ID:');
-    if (!blobId) return;
-    
-    setLoadingResponses(true);
-    try {
-      const form = await loadFormDefinition(blobId);
-      if (form) {
-        setForms(prev => {
-          if (prev.some(f => f._blobId === blobId)) {
-            alert('Form already in list!');
-            return prev;
-          }
-          return [...prev, { ...form, _blobId: blobId }];
-        });
-        
-        const subs = await getSubmissionsForForm(blobId);
-        setResponses(prev => [...prev, ...subs.map(s => ({ ...s, formBlobId: blobId }))]);
-        
-        alert('Form imported successfully!');
+  const handleImportForm = () => {
+    showPrompt('Enter Form Blob ID:', async (blobId) => {
+      if (!blobId) return;
+      
+      setLoadingResponses(true);
+      try {
+        const form = await loadFormDefinition(blobId);
+        if (form) {
+          setForms(prev => {
+            if (prev.some(f => f._blobId === blobId)) {
+              showModal('Notice', 'Form already in list!');
+              return prev;
+            }
+            return [...prev, { ...form, _blobId: blobId }];
+          });
+          
+          const subs = await getSubmissionsForForm(blobId);
+          setResponses(prev => [...prev, ...subs.map(s => ({ ...s, formBlobId: blobId }))]);
+          
+          showModal('Success', 'Form imported successfully!');
+        }
+      } catch (e: any) {
+        showModal('Error', 'Failed to load form: ' + e.message);
+      } finally {
+        setLoadingResponses(false);
       }
-    } catch (e: any) {
-      alert('Failed to load form: ' + e.message);
-    } finally {
-      setLoadingResponses(false);
-    }
+    });
   };
 
   const handleExportCSV = () => {
@@ -358,35 +382,36 @@ export default function DashboardPage() {
     exportSubmissionsToCSV(formToExport, subsForForm);
   };
 
-  const handleAddTeamMember = async () => {
-    const address = prompt("Enter wallet address to add as admin:");
-    if (!address) return;
-    
-    if (!selectedFormObjectId) {
-      alert("Form ID not loaded yet. Please wait or refresh.");
-      return;
-    }
-    
-    try {
-      let tx;
-      if (selectedTeamObjectId) {
-        tx = addDecryptorTx(selectedFormObjectId, selectedTeamObjectId, address);
-      } else {
-        tx = addTeamMemberTx(selectedFormObjectId, address);
+  const handleAddTeamMember = () => {
+    showPrompt('Enter wallet address to add as admin:', async (address) => {
+      if (!address) return;
+      
+      if (!selectedFormObjectId) {
+        showModal('Notice', 'Form ID not loaded yet. Please wait or refresh.');
+        return;
       }
-      signAndExecute({ transaction: tx }, {
-        onSuccess: (result) => {
-          alert("Success! Team member added.");
-          console.log(result);
-        },
-        onError: (error) => {
-          alert("Error adding team member: " + error.message);
-          console.log(error);
+      
+      try {
+        let tx;
+        if (selectedTeamObjectId) {
+          tx = addDecryptorTx(selectedFormObjectId, selectedTeamObjectId, address);
+        } else {
+          tx = addTeamMemberTx(selectedFormObjectId, address);
         }
-      });
-    } catch (e) {
-      alert("Error: " + (e instanceof Error ? e.message : String(e)));
-    }
+        signAndExecute({ transaction: tx }, {
+          onSuccess: (result) => {
+            showModal('Success', 'Team member added successfully!');
+            console.log(result);
+          },
+          onError: (error) => {
+            showModal('Error', 'Error adding team member: ' + error.message);
+            console.log(error);
+          }
+        });
+      } catch (e) {
+        showModal('Error', 'Error: ' + (e instanceof Error ? e.message : String(e)));
+      }
+    });
   };
 
   const runAIAnalysis = async () => {
@@ -394,7 +419,7 @@ export default function DashboardPage() {
     if (!formToAnalyze) return;
     const subsForForm = responses.filter((r) => r.formBlobId === formToAnalyze._blobId);
     if (subsForForm.length === 0) {
-      alert('No submissions to analyze for this form.');
+      showModal('Notice', 'No submissions to analyze for this form.');
       return;
     }
     
@@ -405,7 +430,7 @@ export default function DashboardPage() {
       setAiResult(result);
     } catch (e) {
       console.error(e);
-      alert(e instanceof Error ? e.message : 'AI Analysis failed');
+      showModal('Error', e instanceof Error ? e.message : 'AI Analysis failed');
     } finally {
       setAiLoading(false);
     }
@@ -580,6 +605,27 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
+                {selectedFormId !== 'all' && (
+                  <div className="px-6 py-4 bg-[#4a2e8c]/5 border-b border-black/[0.03] flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-jakarta text-gray-500">
+                      <span className="font-bold">Form Link:</span>
+                      <span className="font-mono text-[#4a2e8c]">{`${typeof window !== 'undefined' ? window.location.origin : ''}/form/${selectedFormId}`}</span>
+                    </div>
+                    <Button 
+                      variant="ghost-purple" 
+                      className="!py-2 !px-2 rounded-full flex items-center justify-center"
+                      onClick={() => {
+                        if (typeof window !== 'undefined') {
+                          navigator.clipboard.writeText(`${window.location.origin}/form/${selectedFormId}`);
+                          showModal('Success', 'Link copied to clipboard!');
+                        }
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                    </Button>
+                  </div>
+                )}
+
                 {loadingResponses ? (
                   <div className="p-24 flex flex-col items-center gap-6">
                     <div className="relative w-16 h-16">
@@ -587,14 +633,6 @@ export default function DashboardPage() {
                       <div className="absolute inset-0 rounded-full border-4 border-t-[#4a2e8c] animate-spin" />
                     </div>
                     <p className="font-jakarta font-bold text-[11px] text-[#4a2e8c] uppercase tracking-[0.2em]">Syncing decentralized data…</p>
-                  </div>
-                ) : filtered.length === 0 ? (
-                  <div className="p-24 text-center">
-                    <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 border border-black/5">
-                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ddd" strokeWidth="2.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /></svg>
-                    </div>
-                    <h4 className="font-outfit font-bold text-xl mb-2 text-gray-400">Quiet in here…</h4>
-                    <p className="font-jakarta text-gray-400 text-sm max-w-xs mx-auto">Deploy a form and share the link to start collecting decentralized feedback.</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -609,7 +647,18 @@ export default function DashboardPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-black/[0.01]">
-                        {filtered.map((resp, i) => (
+                        {filtered.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="p-12 text-center">
+                              <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-black/5">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ddd" strokeWidth="2.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /></svg>
+                              </div>
+                              <h4 className="font-outfit font-bold text-lg mb-1 text-gray-400">Quiet in here…</h4>
+                              <p className="font-jakarta text-gray-400 text-xs max-w-xs mx-auto">Deploy a form and share the link to start collecting decentralized feedback.</p>
+                            </td>
+                          </tr>
+                        ) : (
+                          filtered.map((resp, i) => (
                           <motion.tr
                             key={resp._blobId ?? resp.submissionId}
                             initial={{ opacity: 0, y: 10 }}
@@ -652,7 +701,7 @@ export default function DashboardPage() {
                               </div>
                             </td>
                           </motion.tr>
-                        ))}
+                        )))}
                       </tbody>
                     </table>
                   </div>
@@ -933,6 +982,26 @@ export default function DashboardPage() {
           )}
         </AnimatePresence>
       </div>
+      
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={modalTitle}>
+        {modalMessage}
+      </Modal>
+
+      <Modal isOpen={promptOpen} onClose={() => setPromptOpen(false)} title={promptTitle}>
+        <div className="space-y-4">
+          <input 
+            type="text"
+            value={promptValue}
+            onChange={(e) => setPromptValue(e.target.value)}
+            className="w-full bg-gray-50/50 border border-black/5 rounded-2xl px-4 py-3 font-jakarta text-sm outline-none focus:border-[#cdb4ff] text-black"
+            placeholder="Type here..."
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setPromptOpen(false)}>Cancel</Button>
+            <Button variant="purple" onClick={() => { onPromptConfirm(promptValue); setPromptOpen(false); }}>OK</Button>
+          </div>
+        </div>
+      </Modal>
     </>
   );
 }

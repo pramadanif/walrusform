@@ -27,6 +27,7 @@ export interface FormDefinition {
   id: string;           // uuid
   title: string;
   description?: string;
+  bannerUrl?: string;
   fields: FormField[];
   creatorWallet?: string;
   createdAt: string;
