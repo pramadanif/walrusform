@@ -80,6 +80,10 @@ export default function SettingsPage() {
     if (typeof window === 'undefined') return '';
     return localStorage.getItem('worm_openrouter_key') ?? '';
   });
+  const [selectedModel, setSelectedModel] = useState(() => {
+    if (typeof window === 'undefined') return 'deepseek/deepseek-v4-flash:free';
+    return localStorage.getItem('worm_default_model') ?? 'deepseek/deepseek-v4-flash:free';
+  });
 
   const addSealWallet = () => {
     const w = newWallet.trim();
@@ -349,7 +353,26 @@ export default function SettingsPage() {
                           </Button>
                         </div>
                         <p className="text-[10px] text-gray-400 font-jakarta mt-2 ml-1">
-                          Get a key from <a href="https://openrouter.ai/" target="_blank" rel="noopener noreferrer" className="text-[#4a2e8c] underline">openrouter.ai</a>. We recommend using free models like `google/gemini-2.0-flash-exp:free`.
+                          Get a key from <a href="https://openrouter.ai/" target="_blank" rel="noopener noreferrer" className="text-[#4a2e8c] underline">openrouter.ai</a>.
+                        </p>
+                      </div>
+
+                      <div className="mt-6">
+                        <label className="text-[11px] font-jakarta font-bold text-gray-400 uppercase tracking-widest ml-1 block mb-3">Default Model ID</label>
+                        <div className="flex gap-4 p-2 bg-white rounded-[28px] border border-black/5 shadow-inner">
+                          <input
+                            type="text"
+                            placeholder="deepseek/deepseek-v4-flash:free"
+                            value={selectedModel}
+                            onChange={(e) => {
+                              setSelectedModel(e.target.value);
+                              localStorage.setItem('worm_default_model', e.target.value);
+                            }}
+                            className="flex-1 bg-transparent border-none outline-none px-6 font-mono text-sm text-black placeholder:text-gray-300"
+                          />
+                        </div>
+                        <p className="text-[10px] text-gray-400 font-jakarta mt-2 ml-1">
+                          The model used for AI Insights. E.g., `deepseek/deepseek-v4-flash:free`, `google/gemma-4-31b-it:free`.
                         </p>
                       </div>
                     </div>

@@ -427,7 +427,8 @@ export default function DashboardPage() {
     setAiLoading(true);
     try {
       const submissionsToAnalyze = subsForForm.map(s => s.answers);
-      const result = await analyzeSubmissions(formToAnalyze.title, submissionsToAnalyze);
+      const model = localStorage.getItem('worm_default_model') ?? 'deepseek/deepseek-v4-flash:free';
+      const result = await analyzeSubmissions(formToAnalyze.title, submissionsToAnalyze, model);
       setAiResult(result);
     } catch (e) {
       console.error(e);
