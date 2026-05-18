@@ -27,17 +27,19 @@
 4. [User Flow Diagram](#user-flow-diagram)
 5. [Data Flow Diagram](#data-flow-diagram)
 6. [Smart Contract Architecture](#smart-contract-architecture)
-7. [Security Model](#security-model)
-8. [Features](#features)
-9. [Tech Stack](#tech-stack)
-10. [Project Structure](#project-structure)
-11. [Getting Started](#getting-started)
-12. [Environment Variables](#environment-variables)
-13. [Move Package Deployment](#move-package-deployment)
-14. [End-to-End Testing](#end-to-end-testing)
-15. [How Seal Encryption Works](#how-seal-encryption-works)
-16. [Roadmap](#roadmap)
-17. [Contributing](#contributing)
+7. [Contract Deployment Addresses](#contract-deployment-addresses)
+8. [Smart Contract Functions Reference](#smart-contract-functions-reference)
+9. [Security Model](#security-model)
+10. [Features](#features)
+11. [Tech Stack](#tech-stack)
+12. [Project Structure](#project-structure)
+13. [Getting Started](#getting-started)
+14. [Environment Variables](#environment-variables)
+15. [Move Package Deployment](#move-package-deployment)
+16. [End-to-End Testing](#end-to-end-testing)
+17. [How Seal Encryption Works](#how-seal-encryption-works)
+18. [Roadmap](#roadmap)
+19. [Contributing](#contributing)
 
 ---
 
@@ -87,50 +89,44 @@ Worm is built on three decentralized layers:
 
 ```mermaid
 graph TB
-    subgraph FE["Frontend (Next.js 16)"]
-        B[Builder Page]
-        D[Dashboard Page]
-        F[Public Form Page]
-        S[Settings Page]
+    subgraph FE["🎨 Frontend Layer (Next.js 16.2.4)"]
+        B["Builder Page<br/>(Form Designer)"]
+        D["Dashboard Page<br/>(Admin Panel)"]
+        F["Public Form Page<br/>(Respondent UI)"]
+        S["Settings Page<br/>(Encryption Config)"]
+        T["Templates Page<br/>(Pre-built Forms)"]
     end
 
-    subgraph LIB["Lib Layer (src/lib)"]
-        SA[suiActions.ts]
-        WS[walrus.ts]
-        SS[seal.ts]
-        FS[formStorage.ts]
-        WR[walrusRegistry.ts]
-        SUB[submissionStorage.ts]
+    subgraph SDK["🔐 SDK Integration Layer"]
+        SS["seal.ts<br/>(Threshold Encryption)"]
+        WS["walrus.ts<br/>(Blob Storage)"]
+        SA["suiActions.ts<br/>(On-chain Registry)"]
     end
 
-    subgraph CHAIN["Sui Testnet"]
-        PKG["Move Package\n0x6248..."]
-        OBJ[Form Shared Objects]
-        EVT[FormCreated Events]
+    subgraph INFRA["🏗️ Web3 Infrastructure"]
+        SUI["Sui Testnet<br/>(Form Objects<br/>& Events)"]
+        WALRUS["Walrus Storage<br/>(Immutable Blobs)"]
+        VALIDATORS["Sui Validators<br/>(Key Servers)"]
     end
 
-    subgraph STORAGE["Walrus Testnet"]
-        FB[Form Blob]
-        SB[Submission Blob]
-        IB[Index Blob]
+    subgraph STORAGE["💾 Data Storage"]
+        FB["Form Blobs<br/>(Walrus)"]
+        IB["Index Blobs<br/>(Submission Lists)"]
+        SB["Submission Blobs<br/>(Encrypted)"]
     end
 
-    subgraph SEAL["Seal Key Servers"]
-        KS["Key Server\n0x73d0..."]
-        VS[Sui Validators]
-    end
-
-    B --> FS --> WS --> FB
-    B --> SA --> PKG --> OBJ
-    PKG --> EVT
-    D --> SA --> EVT
-    D --> WR --> IB
-    D --> SS --> KS
-    F --> WS --> FB
-    F --> SUB --> SB
-    F --> WR --> IB
-    SS -.->|"Threshold Decrypt"| VS
-    KS --> VS
+    FE -->|Create Form| SDK
+    FE -->|Submit Response| SDK
+    FE -->|Read Forms| SDK
+    
+    SS -->|Encrypt| VALIDATORS
+    WS -->|Upload/Read| WALRUS
+    SA -->|Register/Query| SUI
+    
+    WALRUS --> STORAGE
+    SUI -->|Events| FE
+    
+    VALIDATORS -->|Decryption Keys| SDK
 ```
 
 ---
@@ -138,42 +134,40 @@ graph TB
 ## User Flow Diagram
 
 ```mermaid
-sequenceDiagram
-    participant Creator as 🧑 Form Creator
-    participant Builder as Builder UI
-    participant Walrus as Walrus Storage
-    participant Sui as Sui Testnet
-    participant Respondent as 👤 Respondent
-    participant Dashboard as Dashboard UI
-    participant Seal as Seal Key Server
-
-    Creator->>Builder: Design form (fields, settings)
-    Builder->>Walrus: Upload FormDefinition blob
-    Walrus-->>Builder: blobId returned
-    Builder->>Walrus: Upload empty index blob
-    Walrus-->>Builder: indexBlobId returned
-    Builder->>Sui: create_form(title, blobId, indexBlobId)
-    Sui-->>Builder: Form shared object created + FormCreated event emitted
-    Builder-->>Creator: Shareable link /form/{blobId}
-
-    Respondent->>Walrus: Fetch FormDefinition by blobId
-    Walrus-->>Respondent: Form fields loaded
-    Respondent->>Seal: Encrypt submission (if private)
-    Seal-->>Respondent: Encrypted payload
-    Respondent->>Walrus: Upload submission blob
-    Walrus-->>Respondent: submissionBlobId
-    Respondent->>Walrus: Update submission index
-    Walrus-->>Respondent: New indexBlobId
-    Respondent->>Sui: update_submission_index(formId, newIndexBlobId)
-
-    Creator->>Dashboard: Open dashboard
-    Dashboard->>Sui: Query FormCreated events (global discovery)
-    Sui-->>Dashboard: All form object IDs
-    Dashboard->>Walrus: Fetch submission index blobs
-    Walrus-->>Dashboard: Encrypted submission blob IDs
-    Dashboard->>Seal: Request decryption keys (wallet auth)
-    Seal-->>Dashboard: Decrypted submissions
-    Dashboard-->>Creator: Readable feedback data
+flowchart TD
+    Start([User Visit]) --> Auth{Wallet<br/>Connected?}
+    Auth -->|No| Connect["Connect Sui Wallet"]
+    Auth -->|Yes| Landing["Landing Page"]
+    Connect --> Landing
+    
+    Landing --> Choice{User Action?}
+    
+    Choice -->|Create Form| Builder["Form Builder"]
+    Choice -->|View Forms| Dashboard["Admin Dashboard"]
+    Choice -->|Join Form| Public["Public Form"]
+    
+    Builder --> Design["Design Form<br/>(Add Fields)"]
+    Design --> Config["Configure<br/>(Seal Encryption)"]
+    Config --> Deploy["Deploy to Walrus<br/>& Sui"]
+    Deploy --> Share["Share Form Link"]
+    Share --> GetResponses["Monitor Responses"]
+    
+    Dashboard --> Sync["Sync from Sui<br/>(Event Discovery)"]
+    Sync --> View["View Responses"]
+    View --> Decrypt{Encrypted?}
+    Decrypt -->|Yes| SealDecrypt["Seal Decryption"]
+    Decrypt -->|No| Show["Display Data"]
+    SealDecrypt --> Show
+    Show --> Export["Export to CSV"]
+    
+    Public --> Fill["Fill Form Fields"]
+    Fill --> Encrypt{Encryption<br/>Enabled?}
+    Encrypt -->|Yes| SealEncrypt["Seal Encryption"]
+    Encrypt -->|No| Store["Store Plaintext"]
+    SealEncrypt --> Upload["Upload to Walrus"]
+    Store --> Upload
+    Upload --> UpdateIndex["Update Index<br/>on Sui"]
+    UpdateIndex --> Confirm["Submission Confirmed"]
 ```
 
 ---
@@ -181,50 +175,45 @@ sequenceDiagram
 ## Data Flow Diagram
 
 ```mermaid
-flowchart LR
-    subgraph INPUT["Input Layer"]
-        A[Form Fields\nText/Rating/File/URL]
-        B[Creator Wallet\nPublic Key]
-    end
+sequenceDiagram
+    participant User as User (Wallet)
+    participant Frontend as Next.js Frontend
+    participant Seal as Seal SDK<br/>(Threshold Encrypt)
+    participant Walrus as Walrus Storage
+    participant Sui as Sui Blockchain
+    participant Validators as Sui Validators<br/>(Key Servers)
 
-    subgraph ENCRYPT["Seal Encryption Layer"]
-        C{encryptWithSeal}
-        D[WORM_SEAL_SDK_V1 blob]
-        E[AES-GCM-256 fallback]
-    end
-
-    subgraph WALRUS["Walrus Storage Layer"]
-        F[Submission Blob]
-        G[Form Definition Blob]
-        H[Index Blob - Append Only]
-    end
-
-    subgraph SUI["Sui On-Chain Layer"]
-        I[Form Shared Object]
-        J[FormCreated Event]
-        K[SubmissionIndexUpdated Event]
-    end
-
-    subgraph DISCOVER["Discovery Layer"]
-        L[queryEvents - Sui RPC]
-        M[Global Form Registry]
-    end
-
-    A --> C
-    B --> C
-    C -->|Has formObjectId| D
-    C -->|No objectId| E
-    D --> F
-    E --> F
-    F --> H
-    G --> I
-    H --> I
-    I --> J
-    I --> K
-    J --> L
-    L --> M
-    M -->|Reconstruct| G
-    M -->|Load index| H
+    User->>Frontend: 1. Create Form
+    Frontend->>Frontend: 2. Generate FormDefinition
+    Frontend->>Walrus: 3. uploadToWalrus(form)
+    Walrus-->>Frontend: 4. blobId
+    Frontend->>Sui: 5. create_form tx<br/>(title, blobId)
+    Sui->>Sui: 6. Create Form object
+    Sui-->>User: 7. formId (object address)
+    
+    User->>Frontend: 8. Submit Response
+    Frontend->>Seal: 9. seal.encrypt(data,<br/>formId, packageId)
+    Seal->>Validators: 10. Get public keys
+    Validators-->>Seal: 11. Threshold keys
+    Seal-->>Frontend: 12. encryptedObject
+    Frontend->>Walrus: 13. uploadToWalrus(encrypted)
+    Walrus-->>Frontend: 14. submissionBlobId
+    Frontend->>Sui: 15. update_submission_index<br/>(formId, newBlobId)
+    Sui->>Sui: 16. Emit SubmissionIndexUpdated
+    
+    User->>Frontend: 17. View Dashboard
+    Frontend->>Sui: 18. queryEvents(FormCreated)
+    Sui-->>Frontend: 19. All forms (global discovery)
+    Frontend->>Walrus: 20. readFromWalrus(indexBlobId)
+    Walrus-->>Frontend: 21. Submission list
+    Frontend->>Walrus: 22. readFromWalrus(submissionBlobId)
+    Walrus-->>Frontend: 23. Encrypted blob
+    
+    User->>Frontend: 24. Authorize Decryption
+    Frontend->>Sui: 25. seal_approve tx
+    Sui->>Validators: 26. Check approval
+    Validators-->>Seal: 27. Key shares
+    Seal-->>Frontend: 28. Decrypted plaintext
 ```
 
 ---
@@ -239,39 +228,318 @@ classDiagram
         +String form_blob_id
         +String latest_submission_index_blob_id
         +address creator
-        +create_form()
-        +update_submission_index()
+        +vector address team_members
+        
+        create_form()
+        update_submission_index()
+        add_team_member()
+        remove_team_member()
     }
 
     class FormCreated {
         +address form_id
         +address creator
         +String form_blob_id
+        
+        emitted_on Form creation
     }
 
     class SubmissionIndexUpdated {
         +address form_id
         +String new_index_blob_id
+        
+        emitted_on index update
+    }
+
+    class IncentivePool {
+        +Balance SUI balance
+        +u64 reward_per_response
+        +u64 max_responses
+        +u64 current_responses
+        
+        store_incentive()
+        distribute_reward()
+    }
+
+    class SubmissionMeta {
+        +String status
+        +String note
+        +u8 rank
+        
+        update_meta()
     }
 
     class SealApproval {
         +UID id
         +address form_id
-        +vector~address~ approved_decryptors
-        +seal_approve()
+        +vector address approved_decryptors
+        
+        seal_approve()
     }
 
-    Form ..> FormCreated : emits
-    Form ..> SubmissionIndexUpdated : emits
+    Form "1" --> "0..*" FormCreated : emits
+    Form "1" --> "0..*" SubmissionIndexUpdated : emits
+    Form "1" --> "1" IncentivePool : manages
+    Form "1" --> "0..*" SubmissionMeta : tracks
     Form "1" --> "0..*" SealApproval : authorizes
 ```
 
-**Deployed Package ID:**
-```
-0x624805e8d931a770ebc5426a72797fc74b7f100cfb0083d67d77d48558fa5e83
+---
+
+## Contract Deployment Addresses
+
+### 📍 Mainnet Deployment
+
+| Component | Address | Chain | Status |
+|---|---|---|---|
+| **Move Package** | `0x49b039b07d3738244258afac14c90364f89d3f68c1ded39a267fdf9c65819156` | Sui Mainnet | ✅ Live |
+| **Upgrade Capability** | `0x4a1086b92b794c7e717b4045f1e1b971f454fd9305478089ee9b3abfffbcdd28` | Sui Mainnet | 🔐 Controlled |
+| **Module** | `worm` | Sui Mainnet | ✅ Active |
+
+### 🧪 Testnet Deployment
+
+| Component | Address | Chain | Status |
+|---|---|---|---|
+| **Move Package** | `0x9752e3c1a621d17526b1bbe75ee0098151b3f392ce71035f39c0b835fc7a665b` | Sui Testnet | ✅ Live |
+| **Upgrade Capability** | `0xb88863798d6e7295540cff9c6c7048f8288e98159cac49567a06d90768ca078a` | Sui Testnet | 🔐 Controlled |
+| **Module** | `worm` | Sui Testnet | ✅ Active |
+| **Seal Key Server** | `0x73d05d62c18d9374e3ea529e8e0ed6161da1a141a94d3f76ae3fe4e99356db75` | Sui Testnet | 🔐 Threshold Keys |
+
+### 🔧 Build Configuration
+
+```toml
+[package.manifest]
+name = "move_worm_v2"
+version = "1.0.0"
+edition = "2024"
+
+[package.dependencies.Sui]
+version = "1.70.2"
 ```
 
-**Network:** Sui Testnet
+---
+
+## Smart Contract Functions Reference
+
+### Core Functions
+
+#### `create_form`
+Creates a new form on the Sui blockchain.
+
+**Parameters:**
+- `title: String` — Form title/name
+- `form_blob_id: String` — Walrus blob ID containing form definition (JSON)
+- `submission_index_blob_id: String` — Walrus blob ID for submission index (append-only)
+- `ctx: &mut TxContext` — Transaction context
+
+**Returns:**
+- Shared `Form` object with unique address
+- Emits `FormCreated` event
+
+**Example:**
+```move
+create_form(
+    b"Customer Feedback Survey".to_string(),
+    b"Es7i4iw1l3xkak2o1buw2bz3j7bcj6wn1q9jfb3v".to_string(),
+    b"Es7i4iw1l3xkak2o1buw2bz3j7bcj6wn1q9jfb3w".to_string(),
+    &mut ctx
+)
+```
+
+**On-Chain Result:**
+- Form object stored in Sui state
+- Globally discoverable via `FormCreated` event
+- Creator holds rights to modify form and submissions
+
+---
+
+#### `update_submission_index`
+Updates the submission index pointer on-chain after new submissions are added to Walrus.
+
+**Parameters:**
+- `form_id: address` — Address of the Form object
+- `new_index_blob_id: String` — New Walrus blob ID containing updated submission index
+- `ctx: &mut TxContext` — Transaction context
+
+**Returns:**
+- Updated Form object with new `latest_submission_index_blob_id`
+- Emits `SubmissionIndexUpdated` event
+
+**Example:**
+```move
+update_submission_index(
+    0xabcd1234...,
+    b"Es7i4iw1l3xkak2o1buw2bz3j7bcj6wn1q9jfb3x".to_string(),
+    &mut ctx
+)
+```
+
+**Event Emission:**
+```move
+event::emit(SubmissionIndexUpdated {
+    form_id: @0xabcd1234,
+    new_index_blob_id: b"Es7i4iw1l3xkak2o1buw2bz3j7bcj6wn1q9jfb3x",
+})
+```
+
+---
+
+#### `seal_approve`
+Creates a Seal approval object for threshold-encrypted submissions. Authorizes specific addresses to decrypt submissions using Seal SDK.
+
+**Parameters:**
+- `form_id: address` — Address of the Form object
+- `approved_decryptors: vector<address>` — Addresses authorized to decrypt submissions
+- `ctx: &mut TxContext` — Transaction context
+
+**Returns:**
+- `SealApproval` object with list of authorized decryptors
+- Stored as dynamic field on Form object
+
+**Example:**
+```move
+seal_approve(
+    0xabcd1234...,
+    vector[0xdecrypt1, 0xdecrypt2],
+    &mut ctx
+)
+```
+
+**Security Note:**
+- Only form creator can call this function
+- Decryptors must have valid Sui addresses
+- Threshold-encrypted submissions cannot be read without Seal approval
+
+---
+
+### Team & Access Control Functions
+
+#### `add_team_member`
+Adds a team member as co-owner of a form.
+
+**Parameters:**
+- `form_id: address` — Form object address
+- `member_address: address` — Address to add
+- `ctx: &mut TxContext` — Transaction context
+
+**Security:**
+- Only creator or existing team members can call
+- New members gain full form management rights
+
+---
+
+#### `remove_team_member`
+Removes a team member from form co-ownership.
+
+**Parameters:**
+- `form_id: address` — Form object address
+- `member_address: address` — Address to remove
+- `ctx: &mut TxContext` — Transaction context
+
+---
+
+### Incentive Pool Functions
+
+#### `store_incentive`
+Deposits SUI as rewards for form respondents.
+
+**Parameters:**
+- `form_id: address` — Form object address
+- `coins: Coin<SUI>` — Coins to deposit
+- `reward_per_response: u64` — Reward amount per submission
+- `max_responses: u64` — Maximum responses to reward
+- `ctx: &mut TxContext` — Transaction context
+
+**Example:**
+```move
+// Deposit 1 SUI (1,000,000,000 in MIST) for 10 responses @ 100M MIST each
+store_incentive(
+    0xabcd1234,
+    coin_1_sui,
+    100000000,  // 0.1 SUI per response
+    10,
+    &mut ctx
+)
+```
+
+---
+
+#### `distribute_reward`
+Distributes rewards to a respondent after submission.
+
+**Parameters:**
+- `form_id: address` — Form object address
+- `recipient: address` — Respondent address
+- `ctx: &mut TxContext` — Transaction context
+
+**Returns:**
+- `Coin<SUI>` with reward amount transferred to recipient
+
+---
+
+### Metadata Management
+
+#### `update_submission_meta`
+Updates status, notes, and rank for a specific submission.
+
+**Parameters:**
+- `form_id: address` — Form object address
+- `submission_blob_id: String` — Submission Walrus blob ID
+- `status: String` — Status (e.g., "New", "In Review", "Actioned")
+- `note: String` — Internal notes from form creator
+- `rank: u8` — Priority rank (0-255)
+
+**Emitted Event:**
+```move
+event::emit(MetaUpdated {
+    form_id: @0xabcd1234,
+    submission_blob_id: b"Es7i4iw1l3xkak2o1buw2bz3j7bcj6wn1q9jfb3y",
+    status: b"In Review".to_string(),
+    note: b"High priority bug report".to_string(),
+    rank: 5,
+})
+```
+
+---
+
+### Events Reference
+
+```rust
+/// Emitted when a form is created
+public struct FormCreated has copy, drop {
+    form_id: address,
+    creator: address,
+    form_blob_id: String,
+}
+
+/// Emitted when submission index is updated
+public struct SubmissionIndexUpdated has copy, drop {
+    form_id: address,
+    new_index_blob_id: String,
+}
+
+/// Emitted when submission metadata changes
+public struct MetaUpdated has copy, drop {
+    form_id: address,
+    submission_blob_id: String,
+    status: String,
+    note: String,
+    rank: u8,
+}
+
+/// Emitted when team is registered
+public struct TeamCreated has copy, drop {
+    form_id: address,
+    team_id: address,
+    members: vector<address>,
+}
+
+/// Emitted when pool is created
+public struct PoolCreated has copy, drop {
+    form_id: address,
+    pool_id: address,
+}
+```
 
 ---
 
@@ -283,7 +551,7 @@ flowchart TD
     E1 -->|Yes| S2[Seal SDK: seal.encrypt]
     E1 -->|No| S3[Plaintext Blob on Walrus]
 
-    S2 --> S4["Threshold Key Split\nacross Sui Validators"]
+    S2 --> S4["Threshold Key Split<br/>across Sui Validators"]
     S4 --> S5[WORM_SEAL_SDK_V1 Blob on Walrus]
 
     S5 --> D1{Read Request}
