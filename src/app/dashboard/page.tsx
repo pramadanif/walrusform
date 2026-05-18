@@ -204,11 +204,27 @@ export default function DashboardPage() {
                 return { ...base, _sealError: 'Connect wallet to decrypt.' };
               }
               try {
-                const raw = await decryptWithSeal(
-                  (sub.answers as { __sealed: string }).__sealed,
-                  allowed,
-                  account.address
-                );
+                let raw: string;
+                try {
+                  raw = await decryptWithSeal(
+                    (sub.answers as { __sealed: string }).__sealed,
+                    allowed,
+                    account.address
+                  );
+                } catch (e: unknown) {
+                  // Fallback to Walrus blob allowedDecryptors if blockchain list failed
+                  const fallbackList = form?.settings.allowedDecryptors ?? [];
+                  if (fallbackList.length > 0 && JSON.stringify(fallbackList.sort()) !== JSON.stringify(allowed.sort())) {
+                    raw = await decryptWithSeal(
+                      (sub.answers as { __sealed: string }).__sealed,
+                      fallbackList,
+                      account.address
+                    );
+                  } else {
+                    throw e; // Re-throw if no fallback available or same list
+                  }
+                }
+                
                 const payload = JSON.parse(raw) as { answers?: Record<string, unknown>; mediaBlobIds?: Record<string, string> };
                 return {
                   ...base,
