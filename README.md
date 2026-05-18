@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./wormlogo.png" alt="Worm Logo" width="180" />
+  <img src="./unimportant/wormlogo.png" alt="Worm Logo" width="180" />
 
   <h1>Worm — Decentralized Feedback Infrastructure</h1>
 
