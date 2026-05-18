@@ -205,7 +205,7 @@ function BuilderContent() {
       // 3. Sui Registration
       if (account?.address) {
         setDeployStage('sui');
-        addLog("Registering on Sui Testnet...", "sui");
+        addLog("Registering on Sui Mainnet...", "sui");
         
         // Build the allowed decryptors list from current UI state
         const decryptorList = sealWalletInput.split('\n').map(w => w.trim()).filter(Boolean);

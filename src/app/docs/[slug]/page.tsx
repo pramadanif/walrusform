@@ -20,7 +20,7 @@ const DOCS_CONTENT: Record<string, { title: string; subtitle: string; content: R
         <h3 className="text-2xl font-syne font-extrabold text-black mt-12 mb-4">Libraries & Protocols</h3>
         <ul className="list-disc list-inside space-y-2 ml-4">
           <li><strong>Storage</strong>: Walrus Protocol (via HTTP Aggregator API) for storing large JSON files.</li>
-          <li><strong>Blockchain</strong>: Sui Testnet for anchoring form indices and access controls.</li>
+          <li><strong>Blockchain</strong>: Sui Mainnet for anchoring form indices and access controls.</li>
           <li><strong>SDK</strong>: <code>@mysten/sui</code> and <code>@mysten/dapp-kit</code> for wallet connections and transaction execution.</li>
         </ul>
         <h3 className="text-2xl font-syne font-extrabold text-black mt-12 mb-4">Technical Architecture</h3>
@@ -42,7 +42,7 @@ const DOCS_CONTENT: Record<string, { title: string; subtitle: string; content: R
         <h3 className="text-2xl font-syne font-extrabold text-black mt-12 mb-4">Libraries & Protocols</h3>
         <ul className="list-disc list-inside space-y-2 ml-4">
           <li><strong>Encryption</strong>: <code>@mysten/seal</code> library for end-to-end encryption.</li>
-          <li><strong>Key Management</strong>: Seal Key Server on Sui Testnet for secure key exchange.</li>
+          <li><strong>Key Management</strong>: Seal Key Server on Sui Mainnet for secure key exchange.</li>
         </ul>
         <h3 className="text-2xl font-syne font-extrabold text-black mt-12 mb-4">Seal Cryptography</h3>
         <p>
