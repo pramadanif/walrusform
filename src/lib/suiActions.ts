@@ -381,6 +381,22 @@ export async function getDecryptorsMapping(): Promise<Record<string, string[]>> 
 }
 
 /**
+ * Fetches the team members directly from the Form object.
+ */
+export async function getTeamMembersFromObject(formObjectId: string): Promise<string[]> {
+  const response = await client.getObject({
+    id: formObjectId,
+    options: { showContent: true },
+  });
+  const content = response.data?.content;
+  if (content && content.dataType === 'moveObject') {
+    const fields = content.fields as any;
+    return fields.team_members || [];
+  }
+  return [];
+}
+
+/**
  * Creates a transaction block to set form expiration.
  */
 export function setFormExpirationTx(

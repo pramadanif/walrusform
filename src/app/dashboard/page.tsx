@@ -14,7 +14,7 @@ import { exportSubmissionsToCSV } from '@/lib/csvExport';
 import { getExplorerUrl } from '@/lib/walrus';
 import { decryptWithSeal } from '@/lib/seal';
 import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
-import { getFormByBlobId, getTeamForForm, updateSubmissionMetaTx, getFormsForTeamMember, getFormsByIds, addDecryptorTx, getDecryptorsMapping, addTeamMemberTx } from '@/lib/suiActions';
+import { getFormByBlobId, getTeamForForm, updateSubmissionMetaTx, getFormsForTeamMember, getFormsByIds, addDecryptorTx, getDecryptorsMapping, addTeamMemberTx, getTeamMembersFromObject } from '@/lib/suiActions';
 import DOMPurify from 'dompurify';
 import { analyzeSubmissions, AIAnalysisResult } from '@/lib/ai';
 import { WALRUS_AGGREGATOR } from '@/lib/contracts';
@@ -76,6 +76,8 @@ export default function DashboardPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState<AIAnalysisResult | null>(null);
   const [forms, setForms] = useState<(FormDefinition & { _blobId: string })[]>([]);
+  const [decryptorsMapping, setDecryptorsMapping] = useState<Record<string, string[]>>({});
+  const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
   const [selectedFormId, setSelectedFormId] = useState<string | 'all'>('all');
   const [selectedFormObjectId, setSelectedFormObjectId] = useState<string | null>(null);
   const [selectedTeamObjectId, setSelectedTeamObjectId] = useState<string | null>(null);
@@ -195,6 +197,7 @@ export default function DashboardPage() {
         
         addSyncLog("Fetching updated decryptors from Sui...", "sui");
         const decryptorsMapping = await getDecryptorsMapping();
+        setDecryptorsMapping(decryptorsMapping);
         
         const allSubsPerForm = await Promise.allSettled(
           formIds.map((fid) => getSubmissionsForForm(fid).then(async (subs) => {
@@ -413,36 +416,39 @@ export default function DashboardPage() {
     exportSubmissionsToCSV(formToExport, subsForForm);
   };
 
-  const handleAddTeamMember = () => {
-    showPrompt('Enter wallet address to add as admin:', async (address) => {
-      if (!address) return;
-      
-      if (!selectedFormObjectId) {
-        showModal('Notice', 'Form ID not loaded yet. Please wait or refresh.');
-        return;
-      }
-      
-      try {
-        let tx;
-        if (selectedTeamObjectId) {
-          tx = addDecryptorTx(selectedFormObjectId, selectedTeamObjectId, address);
-        } else {
-          tx = addTeamMemberTx(selectedFormObjectId, address);
+  const executeAddTeamMember = (address: string) => {
+    if (!selectedFormObjectId) {
+      showModal('Notice', 'Form ID not loaded yet. Please wait or refresh.');
+      return;
+    }
+    
+    try {
+      const tx = addTeamMemberTx(selectedFormObjectId, address);
+      signAndExecute({ transaction: tx }, {
+        onSuccess: (result) => {
+          showModal('Success', 'Team member added successfully!');
+          console.log(result);
+        },
+        onError: (error) => {
+          showModal('Error', 'Error adding team member: ' + error.message);
+          console.log(error);
         }
-        signAndExecute({ transaction: tx }, {
-          onSuccess: (result) => {
-            showModal('Success', 'Team member added successfully!');
-            console.log(result);
-          },
-          onError: (error) => {
-            showModal('Error', 'Error adding team member: ' + error.message);
-            console.log(error);
-          }
-        });
+      });
+    } catch (e) {
+      showModal('Error', 'Error: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  const handleAddTeamMember = async () => {
+    setIsTeamModalOpen(true);
+    if (selectedFormObjectId) {
+      try {
+        const members = await getTeamMembersFromObject(selectedFormObjectId);
+        setDecryptorsMapping(prev => ({ ...prev, [selectedFormId]: members }));
       } catch (e) {
-        showModal('Error', 'Error: ' + (e instanceof Error ? e.message : String(e)));
+        console.error('Error fetching team members:', e);
       }
-    });
+    }
   };
 
   const runAIAnalysis = async () => {
@@ -835,6 +841,78 @@ export default function DashboardPage() {
 
         {/* Slide-over Detail Panel */}
         <AnimatePresence>
+          {isTeamModalOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsTeamModalOpen(false)}
+                className="fixed inset-0 bg-black/20 backdrop-blur-md z-[110]"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] bg-white rounded-[32px] z-[120] p-8 flex flex-col shadow-2xl border border-gray-100"
+              >
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <h3 className="text-2xl font-syne font-extrabold tracking-tight">Manage Team</h3>
+                    <p className="text-sm text-gray-500 mt-1">Add or view authorized decryptors for this form.</p>
+                  </div>
+                  <button
+                    onClick={() => setIsTeamModalOpen(false)}
+                    className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 hover:text-black hover:bg-white transition-all border border-black/5 shadow-sm"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                  </button>
+                </div>
+
+                {/* List of existing team members */}
+                <div className="mb-6">
+                  <h4 className="text-[11px] font-jakarta font-bold text-[#4a2e8c] uppercase tracking-wider mb-2">Existing Members</h4>
+                  <div className="space-y-2 max-h-[150px] overflow-y-auto custom-scrollbar">
+                    {(decryptorsMapping[selectedFormId] ?? []).length > 0 ? (
+                      decryptorsMapping[selectedFormId].map((member, idx) => (
+                        <div key={idx} className="p-3 bg-gray-50 rounded-xl text-xs font-mono text-gray-600 break-all">
+                          {member}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-gray-400">No team members added yet.</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Add new member form */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[11px] font-jakarta font-bold text-[#4a2e8c] uppercase tracking-wider block mb-2">Add New Member</label>
+                    <input
+                      type="text"
+                      placeholder="Enter wallet address"
+                      className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#4a2e8c]/20"
+                      id="new-member-address"
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      const input = document.getElementById('new-member-address') as HTMLInputElement;
+                      const address = input.value;
+                      if (!address) return;
+                      executeAddTeamMember(address);
+                      setIsTeamModalOpen(false);
+                    }}
+                    className="w-full bg-[#4a2e8c] text-white p-4 rounded-xl font-jakarta font-bold text-sm hover:bg-[#3d2475] transition-colors"
+                  >
+                    Add Member
+                  </button>
+                </div>
+              </motion.div>
+            </>
+          )}
+
           {selectedResponse && (
             <>
               <motion.div
