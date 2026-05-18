@@ -45,9 +45,12 @@ export default function OnePagerPage() {
             Worm<span className="text-[#4a2e8c]">.</span>
           </h1>
 
-          <p className="text-[20px] md:text-[24px] text-black/60 font-jakarta font-medium tracking-tight max-w-[850px] leading-relaxed mb-12">
+          <p className="text-[20px] md:text-[24px] text-black/60 font-jakarta font-medium tracking-tight max-w-[850px] leading-relaxed mb-4">
             The high-fidelity primitives needed for permanent, transparent, and secure community coordination on the Walrus Protocol.
           </p>
+          <a href="mailto:pramadanifirzatullah@gmail.com" className="text-[16px] text-black/40 hover:text-black font-jakarta font-medium transition-colors mb-12">
+            Email: pramadanifirzatullah@gmail.com
+          </a>
 
           <div className="flex items-center gap-4">
             <Link href="/builder">
