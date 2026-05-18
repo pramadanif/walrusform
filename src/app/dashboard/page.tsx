@@ -98,6 +98,7 @@ export default function DashboardPage() {
 
   const [loadingResponses, setLoadingResponses] = useState(true);
   const [selectedResponse, setSelectedResponse] = useState<Submission | null>(null);
+  const [isDetailExpanded, setIsDetailExpanded] = useState(false);
   const [noteInput, setNoteInput] = useState('');
   const [rankInput, setRankInput] = useState(0);
   const [savingNote, setSavingNote] = useState(false);
@@ -840,7 +841,7 @@ export default function DashboardPage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                onClick={() => setSelectedResponse(null)}
+                onClick={() => { setSelectedResponse(null); setIsDetailExpanded(false); }}
                 className="fixed inset-0 bg-black/20 backdrop-blur-md z-[110]"
               />
               <motion.aside
@@ -848,7 +849,7 @@ export default function DashboardPage() {
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
                 transition={{ type: 'spring', damping: 30, stiffness: 200 }}
-                className="fixed top-8 bottom-8 right-8 w-[520px] glass-card !bg-white !rounded-[56px] z-[120] p-12 flex flex-col shadow-[0_32px_64px_-16px_rgba(0,0,0,0.2)] border-white overflow-hidden"
+                className={`fixed top-8 bottom-8 right-8 ${isDetailExpanded ? 'w-[calc(100%-64px)] max-w-[1200px]' : 'w-[520px]'} glass-card !bg-white !rounded-[56px] z-[120] p-12 flex flex-col shadow-[0_32px_64px_-16px_rgba(0,0,0,0.2)] border-white overflow-hidden transition-all duration-300`}
               >
                 <div className="flex justify-between items-start mb-12">
                   <div>
@@ -858,12 +859,25 @@ export default function DashboardPage() {
                       {selectedResponse._blobId ?? selectedResponse.submissionId}
                     </div>
                   </div>
-                  <button
-                    onClick={() => setSelectedResponse(null)}
-                    className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 hover:text-black hover:bg-white transition-all border border-black/5 shadow-sm"
-                  >
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setIsDetailExpanded(!isDetailExpanded)}
+                      className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 hover:text-black hover:bg-white transition-all border border-black/5 shadow-sm"
+                      title={isDetailExpanded ? "Shrink" : "Expand"}
+                    >
+                      {isDetailExpanded ? (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 14h6v6m10-10h-6V4" /></svg>
+                      ) : (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 3h6v6m-6 10h6v-6M9 21H3v-6m6-10H3v6" /></svg>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => { setSelectedResponse(null); setIsDetailExpanded(false); }}
+                      className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 hover:text-black hover:bg-white transition-all border border-black/5 shadow-sm"
+                    >
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto space-y-10 custom-scrollbar pr-4">
