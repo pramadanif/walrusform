@@ -318,6 +318,66 @@ export default function OnePagerPage() {
         </div>
       </section>
 
+      {/* ──────────────────────────────────────────────────────────────
+          SELF-HOSTED WALRUS INFRASTRUCTURE
+          ────────────────────────────────────────────────────────────── */}
+      <section className="bg-[#050505] text-white pt-32 pb-32 relative z-30 rounded-t-[3rem] -mt-10">
+        <div className="max-w-[1400px] w-full mx-auto px-8 relative z-10">
+          
+          <div className="text-center mb-16 flex flex-col items-center">
+            <div className="text-[12px] font-jakarta font-bold text-[#cdb4ff] uppercase tracking-[0.2em] mb-4">
+              Infrastructure Independence
+            </div>
+            <h2 className="text-4xl md:text-5xl font-syne font-extrabold text-white mb-6">
+              Self-Hosted Walrus Infrastructure
+            </h2>
+            <p className="text-[17px] text-[#a0a0a0] font-jakarta max-w-2xl text-center">
+              To ensure 100% availability and bypass rate limits of public gateways, we have deployed our own dedicated Walrus infrastructure on a VPS.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+            <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 backdrop-blur-md">
+              <h4 className="text-lg font-bold font-syne text-white mb-4">Live Proof of Upload</h4>
+              <p className="text-[#a0a0a0] font-jakarta text-sm mb-4">
+                We successfully uploaded a blob to our self-hosted publisher on the Walrus Mainnet. You can verify it here:
+              </p>
+              <a 
+                href="https://walruscan.com/mainnet/blob/SUkSRv_4joqBOg2jcoFt1Pk5HLPbeulM_C3T33W2Cuc" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-[#cdb4ff] hover:text-white transition-colors text-sm font-mono break-all"
+              >
+                https://walruscan.com/mainnet/blob/SUkSRv_4joqBOg2jcoFt1Pk5HLPbeulM_C3T33W2Cuc
+              </a>
+            </div>
+
+            <div className="space-y-6">
+              <div className="flex items-start gap-4">
+                <div className="w-6 h-6 rounded-full bg-[#4a2e8c]/20 flex items-center justify-center flex-shrink-0 mt-1">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#cdb4ff" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div>
+                  <h4 className="text-lg font-bold font-syne text-white">Dedicated Publisher</h4>
+                  <p className="text-[#a0a0a0] font-jakarta text-sm mt-1">We run a custom publisher node to handle direct writes to the Walrus network without relying on third-party gateways.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <div className="w-6 h-6 rounded-full bg-[#4a2e8c]/20 flex items-center justify-center flex-shrink-0 mt-1">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#cdb4ff" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div>
+                  <h4 className="text-lg font-bold font-syne text-white">Seal Decryptor Proof</h4>
+                  <p className="text-[#a0a0a0] font-jakarta text-sm mt-1">We have granted access to the Walrus team as an authorized decryptor via Seal. Verify on <a href="https://suiscan.xyz/mainnet/tx/FVxz6QzD8V4gtTg9ftVWWCfeZzBkB6iVsBn6JSjwk4gH" target="_blank" rel="noopener noreferrer" className="text-[#cdb4ff] hover:underline">SuiScan</a>.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
       {/* FOOTER */}
       <footer className="bg-white border-t border-black/10 py-12 relative z-30">
         <div className="max-w-[1400px] w-full mx-auto px-8 flex flex-col md:flex-row items-center justify-between gap-6">

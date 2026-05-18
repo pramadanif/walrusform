@@ -15,6 +15,7 @@ const Navbar = () => {
     { label: 'Discover', href: '/templates' },
     { label: 'Build', href: '/builder' },
     { label: 'Dashboard', href: '/dashboard' },
+    { label: 'One Pager', href: '/one-pager' },
   ];
 
   return (
