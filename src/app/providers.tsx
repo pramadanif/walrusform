@@ -4,6 +4,7 @@ import { SuiClientProvider, WalletProvider, createNetworkConfig } from '@mysten/
 import { getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@mysten/dapp-kit/dist/index.css';
+import { SUI_NETWORK } from '@/lib/contracts';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -12,13 +13,13 @@ const queryClient = new QueryClient({
 });
 
 const { networkConfig } = createNetworkConfig({
-  testnet: { url: getJsonRpcFullnodeUrl('testnet'), network: 'testnet' },
+  [SUI_NETWORK]: { url: getJsonRpcFullnodeUrl(SUI_NETWORK as 'testnet' | 'mainnet' | 'devnet' | 'localnet'), network: SUI_NETWORK },
 });
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <SuiClientProvider networks={networkConfig} defaultNetwork="testnet">
+      <SuiClientProvider networks={networkConfig} defaultNetwork={SUI_NETWORK}>
         <WalletProvider autoConnect>{children}</WalletProvider>
       </SuiClientProvider>
     </QueryClientProvider>

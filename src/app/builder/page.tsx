@@ -10,7 +10,7 @@ import Navbar from '@/components/Navbar';
 import { saveFormDefinition, FormDefinition, FormField, getSealWallets } from '@/lib/formStorage';
 import { getExplorerUrl, uploadToWalrus } from '@/lib/walrus';
 import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
-import { createFormTx, setupTeamAndSealTx, createIncentivizedFormTx } from '@/lib/suiActions';
+import { createFormTx, setupTeamAndSealTx, createIncentivizedFormTx, setFormExpirationTx } from '@/lib/suiActions';
 
 const FIELD_TYPES = [
   { id: 'richtext', label: 'Rich Text', icon: 'T', color: '#cdb4ff' },
@@ -50,6 +50,7 @@ export default function BuilderPage() {
   const [bannerUrl, setBannerUrl] = useState('');
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const [fields, setFields] = useState<FormField[]>(() => initialDraft?.fields ?? []);
+  const [expirationDate, setExpirationDate] = useState('');
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(
     () => initialDraft?.fields?.[0]?.id ?? null
   );
@@ -243,28 +244,50 @@ export default function BuilderPage() {
             setShareableLink(link);
             addLog("On-chain registration confirmed.", "sui");
 
-            // If Seal is enabled, register the access policy on-chain
-            if (sealEnabled && decryptorList.length > 0 && formObjectId) {
-              addLog(`Registering Seal policy and Team for ${decryptorList.length} member(s)...`, "seal");
+            const runSealPolicy = () => {
+              if (sealEnabled && decryptorList.length > 0 && formObjectId) {
+                addLog(`Registering Seal policy and Team for ${decryptorList.length} member(s)...`, "seal");
+                signAndExecute({
+                  transaction: setupTeamAndSealTx(formObjectId, decryptorList),
+                }, {
+                  onSuccess: () => {
+                    addLog("Seal policy and Team registered on-chain. ✓", "done");
+                    setDeployStage('idle');
+                    setIsDeploying(false);
+                  },
+                  onError: (err) => {
+                    console.warn('[Builder] seal_approve failed:', err);
+                    addLog("Seal policy tx failed — Walrus blob still secured.", "seal");
+                    setDeployStage('idle');
+                    setIsDeploying(false);
+                  }
+                });
+              } else {
+                addLog("System ready.", "done");
+                setDeployStage('idle');
+                setIsDeploying(false);
+              }
+            };
+
+            // If Expiration is set, register it on-chain
+            if (expirationDate && formObjectId) {
+              addLog("Setting form expiration on-chain...", "sui");
+              const expiresAtMs = new Date(expirationDate).getTime();
               signAndExecute({
-                transaction: setupTeamAndSealTx(formObjectId, decryptorList),
+                transaction: setFormExpirationTx(formObjectId, expiresAtMs),
               }, {
                 onSuccess: () => {
-                  addLog("Seal policy and Team registered on-chain. ✓", "done");
-                  setDeployStage('idle');
-                  setIsDeploying(false);
+                  addLog("Form expiration set on-chain. ✓", "done");
+                  runSealPolicy();
                 },
                 onError: (err) => {
-                  console.warn('[Builder] seal_approve failed:', err);
-                  addLog("Seal policy tx failed — Walrus blob still secured.", "seal");
-                  setDeployStage('idle');
-                  setIsDeploying(false);
+                  console.warn('[Builder] set_form_expiration failed:', err);
+                  addLog("Set expiration failed.", "sui");
+                  runSealPolicy(); // Continue to Seal anyway
                 }
               });
             } else {
-              addLog("System ready.", "done");
-              setDeployStage('idle');
-              setIsDeploying(false);
+              runSealPolicy();
             }
           },
           onError: (err) => {
@@ -787,6 +810,23 @@ export default function BuilderPage() {
                             </motion.div>
                           )}
                         </AnimatePresence>
+                      </div>
+                    </div>
+
+                    {/* Expiration Date */}
+                    <div className="mb-8">
+                      <h4 className="text-[10px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-6">Expiration</h4>
+                      <div className="p-8 rounded-[32px] border border-black/5 bg-white/50 backdrop-blur-sm">
+                        <label className="text-[11px] font-jakarta font-bold text-gray-700 uppercase tracking-widest mb-2 block">Expires At</label>
+                        <input
+                          type="datetime-local"
+                          value={expirationDate}
+                          onChange={(e) => setExpirationDate(e.target.value)}
+                          className="w-full bg-transparent border-b border-black/10 py-2 font-jakarta text-sm outline-none focus:border-[#4a2e8c] transition-colors"
+                        />
+                        <p className="text-[10px] text-gray-400 font-jakarta mt-2">
+                          Form will be closed for submissions after this date.
+                        </p>
                       </div>
                     </div>
 

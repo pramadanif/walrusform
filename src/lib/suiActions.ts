@@ -1,10 +1,10 @@
 import { Transaction } from '@mysten/sui/transactions';
-import { WORM_PACKAGE_ID, WORM_MODULE, WORM_FUNCTIONS, WORM_OBJECT_TYPES } from './contracts';
+import { WORM_PACKAGE_ID, WORM_MODULE, WORM_FUNCTIONS, WORM_OBJECT_TYPES, SUI_RPC_URL, SUI_NETWORK } from './contracts';
 import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 
 export const client = new SuiJsonRpcClient({ 
-  url: 'https://fullnode.testnet.sui.io:443',
-  network: 'testnet'
+  url: SUI_RPC_URL,
+  network: SUI_NETWORK as 'testnet' | 'mainnet' | 'devnet' | 'localnet'
 });
 
 /**
@@ -124,6 +124,7 @@ export function updateSubmissionIndexTx(
     arguments: [
       tx.object(formObjectId),
       tx.pure.string(newIndexBlobId),
+      tx.object('0x6'), // Clock object
     ],
   });
   return tx;
@@ -377,5 +378,23 @@ export async function getDecryptorsMapping(): Promise<Record<string, string[]>> 
   });
 
   return blobIdToMembers;
+}
+
+/**
+ * Creates a transaction block to set form expiration.
+ */
+export function setFormExpirationTx(
+  formObjectId: string,
+  expiresAt: number
+) {
+  const tx = new Transaction();
+  tx.moveCall({
+    target: `${WORM_PACKAGE_ID}::${WORM_MODULE}::set_form_expiration`,
+    arguments: [
+      tx.object(formObjectId),
+      tx.pure.u64(expiresAt),
+    ],
+  });
+  return tx;
 }
 

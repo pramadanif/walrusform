@@ -30,6 +30,9 @@ module move_worm_v2::worm {
     /// Key for incentive pool dynamic field
     public struct IncentivePoolKey has copy, drop, store {}
 
+    /// Key for form expiration dynamic field
+    public struct ExpirationKey has copy, drop, store {}
+
     /// Struct to store in dynamic fields for incentives
     public struct IncentivePool has store {
         balance: Balance<SUI>,
@@ -171,11 +174,26 @@ module move_worm_v2::worm {
         transfer::public_transfer(coin, tx_context::sender(ctx));
     }
 
+    public entry fun set_form_expiration(
+        form: &mut Form,
+        expires_at: u64,
+        ctx: &mut TxContext
+    ) {
+        assert!(tx_context::sender(ctx) == form.creator, 0);
+        dynamic_field::add(&mut form.id, ExpirationKey {}, expires_at);
+    }
+
     public entry fun update_submission_index(
         form: &mut Form,
         new_index_blob_id: String,
+        clock: &sui::clock::Clock,
         _ctx: &mut TxContext
     ) {
+        if (dynamic_field::exists_(&form.id, ExpirationKey {})) {
+            let expires_at = *dynamic_field::borrow<ExpirationKey, u64>(&form.id, ExpirationKey {});
+            assert!(sui::clock::timestamp_ms(clock) < expires_at, 2);
+        };
+
         form.latest_submission_index_blob_id = new_index_blob_id;
 
         event::emit(SubmissionIndexUpdated {

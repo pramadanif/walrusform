@@ -17,6 +17,7 @@ import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-ki
 import { getFormByBlobId, getTeamForForm, updateSubmissionMetaTx, getFormsForTeamMember, getFormsByIds, addDecryptorTx, getDecryptorsMapping, addTeamMemberTx } from '@/lib/suiActions';
 import DOMPurify from 'dompurify';
 import { analyzeSubmissions, AIAnalysisResult } from '@/lib/ai';
+import { WALRUS_AGGREGATOR } from '@/lib/contracts';
 
 type Submission = FormSubmission & AdminMeta & { _blobId?: string; _formTitle?: string; _decrypted?: boolean; _sealError?: string };
 
@@ -33,14 +34,14 @@ function AnswerItem({ label, value, fieldType }: { label: string, value: any, fi
       <div className="font-jakarta font-bold text-[15px] text-gray-800 break-words whitespace-pre-wrap">
         {fieldType === 'video' || (isBlobId && !error) ? (
           <video 
-            src={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${value}`} 
+            src={`${WALRUS_AGGREGATOR}/v1/blobs/${value}`} 
             controls 
             className="w-full max-h-[300px] rounded-2xl mt-2" 
             onError={() => setError(true)}
           />
         ) : fieldType === 'screenshot' || (isBlobId && error) ? (
           <img 
-            src={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${value}`} 
+            src={`${WALRUS_AGGREGATOR}/v1/blobs/${value}`} 
             alt={label} 
             className="w-full max-h-[300px] object-contain rounded-2xl mt-2" 
             onError={() => setError(true)}
@@ -867,7 +868,7 @@ export default function DashboardPage() {
                         {Object.entries(selectedResponse.mediaBlobIds).map(([k, id]) => (
                           <a 
                             key={k} 
-                            href={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${id}`} 
+                            href={`${WALRUS_AGGREGATOR}/v1/blobs/${id}`} 
                             target="_blank" 
                             rel="noopener noreferrer" 
                             className="p-6 rounded-[32px] bg-[#4a2e8c]/5 border border-[#4a2e8c]/10 flex items-center justify-between group hover:bg-[#4a2e8c]/10 transition-all"

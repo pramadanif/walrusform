@@ -1,5 +1,4 @@
-const PUBLISHER = 'https://publisher.walrus-testnet.walrus.space';
-const AGGREGATOR = 'https://aggregator.walrus-testnet.walrus.space';
+import { WALRUS_PUBLISHER as PUBLISHER, WALRUS_AGGREGATOR as AGGREGATOR, WALRUS_EXPLORER_BASE } from './contracts';
 
 // ─── Retry wrapper ───────────────────────────────────────────────────────────
 
@@ -131,7 +130,7 @@ export function validateUploadFile(file: File, fieldType: 'screenshot' | 'video'
 
 // ─── Explorer ─────────────────────────────────────────────────────────────────
 
-export const WALRUS_EXPLORER_BASE = 'https://walruscan.com/testnet/blob';
+// Imported from contracts.ts
 
 export function getExplorerUrl(blobId: string): string {
   return `${WALRUS_EXPLORER_BASE}/${blobId}`;

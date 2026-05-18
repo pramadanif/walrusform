@@ -11,6 +11,7 @@ import { decryptWithSeal } from '@/lib/seal';
 import { useCurrentAccount } from '@mysten/dapp-kit';
 import { getFormRegistry } from '@/lib/formStorage';
 import DOMPurify from 'dompurify';
+import { WALRUS_AGGREGATOR } from '@/lib/contracts';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -247,7 +248,7 @@ export default function ResponseDetailPage({ params }: PageProps) {
                     {getFieldLabel(fieldId)} (Media File)
                   </label>
                   <a
-                    href={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${mediaBlobId}`}
+                    href={`${WALRUS_AGGREGATOR}/v1/blobs/${mediaBlobId}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-white hover:text-[#00E5CC] font-mono text-sm underline flex items-center gap-2"

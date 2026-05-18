@@ -1,4 +1,24 @@
-export const WORM_PACKAGE_ID = "0x6f259495ab1b6201fce895ca50984e3a0ad85bfc7a90b8038d42250c39cd2390";
+export const IS_MAINNET = process.env.NEXT_PUBLIC_MODE === 'mainnet';
+
+export const SUI_NETWORK = IS_MAINNET ? 'mainnet' : 'testnet';
+export const SUI_RPC_URL = IS_MAINNET ? 'https://fullnode.mainnet.sui.io:443' : 'https://fullnode.testnet.sui.io:443';
+
+export const WALRUS_PUBLISHER = IS_MAINNET 
+  ? 'https://publisher.walrus.space' 
+  : 'https://publisher.walrus-testnet.walrus.space';
+
+export const WALRUS_AGGREGATOR = IS_MAINNET 
+  ? 'https://aggregator.walrus.space' 
+  : 'https://aggregator.walrus-testnet.walrus.space';
+
+export const WALRUS_EXPLORER_BASE = IS_MAINNET
+  ? 'https://walruscan.com/mainnet/blob'
+  : 'https://walruscan.com/testnet/blob';
+
+export const WORM_PACKAGE_ID = IS_MAINNET
+  ? process.env.NEXT_PUBLIC_MAINNET_PACKAGE_ID || "0x0"
+  : "0x9752e3c1a621d17526b1bbe75ee0098151b3f392ce71035f39c0b835fc7a665b";
+
 export const WORM_MODULE = "worm";
 
 export const WORM_FUNCTIONS = {
