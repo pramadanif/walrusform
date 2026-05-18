@@ -20,43 +20,11 @@ const TrashIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="no
 
 const TABS = [
   { id: 'Profile', icon: <ProfileIcon /> },
-  { id: 'Team', icon: <TeamIcon /> },
-  { id: 'Encryption (Seal)', icon: <LockIcon /> },
   { id: 'AI Settings', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 16V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2h14a2 2 0 002-2zM7 12h.01M11 12h.01M15 12h.01"/></svg> },
-  { id: 'Notifications', icon: <BellIcon /> },
   { id: 'Export & Data', icon: <DatabaseIcon /> },
   { id: 'Danger Zone', icon: <TrashIcon /> }
 ];
 
-const SEAL_WALLETS_KEY = 'walrusform_seal_wallets';
-const TEAM_KEY = 'walrusform_team';
-const NOTIFICATIONS_KEY = 'walrusform_notifications';
-
-function getSealWallets(): string[] {
-  if (typeof window === 'undefined') return [];
-  try { return JSON.parse(localStorage.getItem(SEAL_WALLETS_KEY) ?? '[]'); } catch { return []; }
-}
-function saveSealWallets(ws: string[]) {
-  localStorage.setItem(SEAL_WALLETS_KEY, JSON.stringify(ws));
-}
-function getTeamMembers(): { address: string; role: string }[] {
-  if (typeof window === 'undefined') return [];
-  try { return JSON.parse(localStorage.getItem(TEAM_KEY) ?? '[]'); } catch { return []; }
-}
-function saveTeamMembers(members: { address: string; role: string }[]) {
-  localStorage.setItem(TEAM_KEY, JSON.stringify(members));
-}
-function getNotifications(): { submissions: boolean; digest: boolean; system: boolean } {
-  if (typeof window === 'undefined') return { submissions: true, digest: false, system: true };
-  try {
-    return JSON.parse(localStorage.getItem(NOTIFICATIONS_KEY) ?? '{"submissions":true,"digest":false,"system":true}');
-  } catch {
-    return { submissions: true, digest: false, system: true };
-  }
-}
-function saveNotifications(prefs: { submissions: boolean; digest: boolean; system: boolean }) {
-  localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(prefs));
-}
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('Profile');
@@ -64,17 +32,7 @@ export default function SettingsPage() {
   const account = useCurrentAccount();
   const importRef = useRef<HTMLInputElement>(null);
 
-  // Seal policy state
-  const [sealWallets, setSealWallets] = useState<string[]>(() => getSealWallets());
-  const [newWallet, setNewWallet] = useState('');
-  const [sealSaved, setSealSaved] = useState(false);
 
-  // Team state
-  const [teamMembers, setTeamMembers] = useState<{ address: string; role: string }[]>(() => getTeamMembers());
-  const [newTeamAddress, setNewTeamAddress] = useState('');
-
-  // Notifications
-  const [notifications, setNotifications] = useState(() => getNotifications());
   const [dataMessage, setDataMessage] = useState<string | null>(null);
   const [openRouterKey, setOpenRouterKey] = useState(() => {
     if (typeof window === 'undefined') return '';
@@ -86,38 +44,6 @@ export default function SettingsPage() {
     return localStorage.getItem('worm_default_model') ?? 'deepseek/deepseek-v4-flash:free';
   });
 
-  const addSealWallet = () => {
-    const w = newWallet.trim();
-    if (!w || sealWallets.includes(w)) return;
-    const updated = [...sealWallets, w];
-    setSealWallets(updated);
-    saveSealWallets(updated);
-    setNewWallet('');
-    setSealSaved(true);
-    setTimeout(() => setSealSaved(false), 2000);
-  };
-
-  const removeSealWallet = (w: string) => {
-    const updated = sealWallets.filter((x) => x !== w);
-    setSealWallets(updated);
-    saveSealWallets(updated);
-  };
-
-  const addTeamMember = () => {
-    const a = newTeamAddress.trim();
-    if (!a) return;
-    const updated = [...teamMembers, { address: a, role: 'viewer' }];
-    setTeamMembers(updated);
-    saveTeamMembers(updated);
-    setNewTeamAddress('');
-  };
-
-  const removeTeamMember = (a: string) => {
-    const updated = teamMembers.filter((m) => m.address !== a);
-    setTeamMembers(updated);
-    saveTeamMembers(updated);
-  };
-
   const handleClearAll = () => {
     if (!confirm('This will clear ALL local form and response data. Walrus blobs are permanent and unaffected. Continue?')) return;
     Object.keys(localStorage)
@@ -126,11 +52,7 @@ export default function SettingsPage() {
     router.push('/');
   };
 
-  const toggleNotification = (key: 'submissions' | 'digest' | 'system') => {
-    const updated = { ...notifications, [key]: !notifications[key] };
-    setNotifications(updated);
-    saveNotifications(updated);
-  };
+
 
   const handleExportData = () => {
     const data: Record<string, string> = {};
@@ -161,9 +83,7 @@ export default function SettingsPage() {
       Object.entries(parsed).forEach(([key, value]) => {
         if (key.startsWith('walrusform_')) localStorage.setItem(key, value);
       });
-      setSealWallets(getSealWallets());
-      setTeamMembers(getTeamMembers());
-      setNotifications(getNotifications());
+
       setDataMessage('Imported local data.');
     } catch (e: unknown) {
       setDataMessage(e instanceof Error ? e.message : 'Import failed');
@@ -251,7 +171,7 @@ export default function SettingsPage() {
                           <label className="text-[11px] font-jakarta font-bold text-gray-400 uppercase tracking-widest ml-1">Current Network</label>
                           <div className="p-5 rounded-2xl bg-gray-50/50 border border-black/5 font-jakarta font-bold text-sm text-black flex items-center gap-3">
                             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                            Sui Testnet
+                            Sui Mainnet
                           </div>
                         </div>
                       </div>
@@ -265,53 +185,7 @@ export default function SettingsPage() {
                   </GlassCard>
                 )}
 
-                {activeTab === 'Encryption (Seal)' && (
-                  <GlassCard className="!p-10 !rounded-[40px] !bg-white/90 border-white shadow-xl">
-                    <div className="flex justify-between items-start mb-10">
-                      <div className="space-y-1">
-                        <h2 className="text-3xl font-syne font-extrabold text-black">Seal Encryption</h2>
-                        <p className="text-gray-400 font-jakarta font-bold text-xs uppercase tracking-widest">End-to-end privacy policy</p>
-                      </div>
-                      <Badge color={sealWallets.length > 0 ? 'green' : 'gray'}>
-                        {sealWallets.length > 0 ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </div>
 
-                    <p className="text-sm text-gray-500 font-jakarta font-medium leading-relaxed mb-10 max-w-2xl">
-                      Seal encryption ensures your form responses are only accessible to approved members. 
-                      Add wallet addresses below to grant them future decryption rights.
-                    </p>
-
-                    <div className="space-y-6">
-                      <label className="text-[11px] font-jakarta font-bold text-gray-400 uppercase tracking-widest ml-1">Approved Wallets ({sealWallets.length})</label>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
-                        {sealWallets.map((w) => (
-                          <div key={w} className="flex items-center justify-between p-4 bg-white border border-black/5 rounded-2xl shadow-sm hover:shadow-md transition-all group">
-                            <span className="font-mono text-xs text-gray-600">{w.slice(0, 12)}…{w.slice(-8)}</span>
-                            <button onClick={() => removeSealWallet(w)} className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all">×</button>
-                          </div>
-                        ))}
-                        {sealWallets.length === 0 && (
-                          <div className="md:col-span-2 p-8 border-2 border-dashed border-gray-100 rounded-[32px] flex flex-col items-center justify-center text-center">
-                            <p className="text-xs font-jakarta font-bold text-gray-400">No wallets added to policy yet</p>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex gap-4 p-2 bg-white rounded-[28px] border border-black/5 shadow-inner">
-                        <input
-                          placeholder="Enter wallet address (0x...)"
-                          value={newWallet}
-                          onChange={(e) => setNewWallet(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && addSealWallet()}
-                          className="flex-1 bg-transparent border-none outline-none px-6 font-mono text-sm text-black placeholder:text-gray-300"
-                        />
-                        <Button className="!rounded-full !px-8 !py-3" onClick={addSealWallet}>Add</Button>
-                      </div>
-                      {sealSaved && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-[11px] font-jakarta font-bold text-green-500 mt-2 px-6">Policy updated successfully ✓</motion.p>}
-                    </div>
-                  </GlassCard>
-                )}
                 {activeTab === 'AI Settings' && (
                   <GlassCard className="!p-10 !rounded-[40px] !bg-white/90 border-white shadow-xl">
                     <div className="flex justify-between items-start mb-10">
@@ -387,49 +261,7 @@ export default function SettingsPage() {
                   </GlassCard>
                 )}
 
-                {activeTab === 'Team' && (
-                  <GlassCard className="!p-10 !rounded-[40px] !bg-white/90 border-white shadow-xl">
-                    <div className="mb-10">
-                      <h2 className="text-3xl font-syne font-extrabold text-black">Team Management</h2>
-                      <p className="text-gray-400 font-jakarta font-bold text-xs uppercase tracking-widest mt-1">Collaborate on your sessions</p>
-                    </div>
 
-                    <div className="space-y-6">
-                      <div className="grid grid-cols-1 gap-3 mb-8">
-                        {teamMembers.map((m) => (
-                          <div key={m.address} className="flex items-center justify-between p-5 bg-white border border-black/5 rounded-[24px] shadow-sm">
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-full bg-[#4a2e8c]/5 flex items-center justify-center text-[#4a2e8c]">
-                                <TeamIcon />
-                              </div>
-                              <span className="font-mono text-sm text-gray-700">{m.address.slice(0, 18)}…</span>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <Badge color="blue">{m.role}</Badge>
-                              <button onClick={() => removeTeamMember(m.address)} className="text-gray-400 hover:text-red-500 transition-colors px-2 text-xl">×</button>
-                            </div>
-                          </div>
-                        ))}
-                        {teamMembers.length === 0 && (
-                          <div className="p-12 border-2 border-dashed border-gray-100 rounded-[40px] flex flex-col items-center justify-center text-center">
-                            <p className="text-sm font-jakarta font-bold text-gray-400">Your team is currently empty</p>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex gap-4 p-2 bg-white rounded-[28px] border border-black/5 shadow-inner">
-                        <input
-                          placeholder="Invite by wallet address..."
-                          value={newTeamAddress}
-                          onChange={(e) => setNewTeamAddress(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && addTeamMember()}
-                          className="flex-1 bg-transparent border-none outline-none px-6 font-mono text-sm text-black placeholder:text-gray-300"
-                        />
-                        <Button className="!rounded-full !px-8 !py-3" onClick={addTeamMember}>Invite</Button>
-                      </div>
-                    </div>
-                  </GlassCard>
-                )}
 
                 {activeTab === 'Danger Zone' && (
                   <GlassCard className="!p-10 !rounded-[40px] !bg-white/90 border-[#ff4d6a]/20 shadow-xl overflow-hidden relative">
@@ -456,38 +288,7 @@ export default function SettingsPage() {
                   </GlassCard>
                 )}
 
-                {activeTab === 'Notifications' && (
-                  <GlassCard className="!p-10 !rounded-[40px] !bg-white/90 border-white shadow-xl">
-                    <div className="mb-10">
-                      <h2 className="text-3xl font-syne font-extrabold text-black">Notifications</h2>
-                      <p className="text-gray-400 font-jakarta font-bold text-xs uppercase tracking-widest mt-1">Control delivery preferences</p>
-                    </div>
 
-                    <div className="space-y-6">
-                      {[
-                        { key: 'submissions', title: 'Submission Alerts', desc: 'Notify on new Walrus responses.' },
-                        { key: 'digest', title: 'Weekly Digest', desc: 'Summary of form activity.' },
-                        { key: 'system', title: 'System Updates', desc: 'Protocol and client updates.' },
-                      ].map((row) => (
-                        <div key={row.key} className="p-6 rounded-[28px] bg-gray-50/50 border border-black/5 flex items-center justify-between">
-                          <div>
-                            <div className="font-jakarta font-bold text-sm text-black">{row.title}</div>
-                            <div className="text-[11px] text-gray-400 font-jakarta font-bold uppercase tracking-widest mt-1">{row.desc}</div>
-                          </div>
-                          <button
-                            onClick={() => toggleNotification(row.key as 'submissions' | 'digest' | 'system')}
-                            className={`w-14 h-7 rounded-full p-1 transition-all duration-500 ${notifications[row.key as 'submissions' | 'digest' | 'system'] ? 'bg-[#4a2e8c]' : 'bg-gray-200 shadow-inner'}`}
-                          >
-                            <motion.div
-                              animate={{ x: notifications[row.key as 'submissions' | 'digest' | 'system'] ? 28 : 0 }}
-                              className="w-5 h-5 rounded-full bg-white shadow-xl"
-                            />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </GlassCard>
-                )}
 
                 {activeTab === 'Export & Data' && (
                   <GlassCard className="!p-10 !rounded-[40px] !bg-white/90 border-white shadow-xl">
