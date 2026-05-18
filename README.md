@@ -39,7 +39,9 @@
 16. [End-to-End Testing](#end-to-end-testing)
 17. [How Seal Encryption Works](#how-seal-encryption-works)
 18. [Roadmap](#roadmap)
-19. [Contributing](#contributing)
+19. [Self-Hosted Walrus Infrastructure](#self-hosted-walrus-infrastructure)
+20. [Admin Tutorial: Adding Team Members (Decryptors)](#admin-tutorial-adding-team-members-decryptors)
+21. [Contributing](#contributing)
 
 ---
 
