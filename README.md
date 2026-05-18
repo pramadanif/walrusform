@@ -10,8 +10,8 @@
 
   <p>
     <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-16.2.4-black?style=flat-square&logo=next.js" alt="Next.js" /></a>
-    <a href="https://sui.io/"><img src="https://img.shields.io/badge/Sui-Testnet-4a2e8c?style=flat-square&logo=sui" alt="Sui" /></a>
-    <a href="https://walrus.site/"><img src="https://img.shields.io/badge/Walrus-Storage-blue?style=flat-square" alt="Walrus" /></a>
+    <a href="https://sui.io/"><img src="https://img.shields.io/badge/Sui-Mainnet-4a2e8c?style=flat-square&logo=sui" alt="Sui" /></a>
+    <a href="https://walrus.site/"><img src="https://img.shields.io/badge/Walrus-Mainnet-blue?style=flat-square" alt="Walrus" /></a>
     <a href="https://sdk.mystenlabs.com/seal"><img src="https://img.shields.io/badge/Seal-Threshold%20Encryption-amber?style=flat-square" alt="Seal" /></a>
     <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square&logo=typescript" alt="TypeScript" /></a>
   </p>
@@ -36,12 +36,16 @@
 13. [Getting Started](#getting-started)
 14. [Environment Variables](#environment-variables)
 15. [Move Package Deployment](#move-package-deployment)
-16. [End-to-End Testing](#end-to-end-testing)
-17. [How Seal Encryption Works](#how-seal-encryption-works)
-18. [Roadmap](#roadmap)
-19. [Self-Hosted Walrus Infrastructure](#self-hosted-walrus-infrastructure)
-20. [Admin Tutorial: Adding Team Members (Decryptors)](#admin-tutorial-adding-team-members-decryptors)
-21. [Contributing](#contributing)
+16. [Mainnet Deployment Guide](#mainnet-deployment-guide)
+17. [End-to-End Testing](#end-to-end-testing)
+18. [How Seal Encryption Works](#how-seal-encryption-works)
+19. [Roadmap](#roadmap)
+20. [Self-Hosted Walrus Infrastructure](#self-hosted-walrus-infrastructure)
+21. [Admin Tutorial: Adding Team Members (Decryptors)](#admin-tutorial-adding-team-members-decryptors)
+22. [Troubleshooting](#troubleshooting)
+23. [FAQ](#faq)
+24. [Performance Optimization](#performance-optimization)
+25. [Contributing](#contributing)
 
 ---
 
@@ -106,8 +110,8 @@ graph TB
     end
 
     subgraph INFRA["🏗️ Web3 Infrastructure"]
-        SUI["Sui Testnet<br/>(Form Objects<br/>& Events)"]
-        WALRUS["Walrus Storage<br/>(Immutable Blobs)"]
+        SUI["Sui Mainnet<br/>(Form Objects<br/>& Events)"]
+        WALRUS["Walrus Mainnet Storage<br/>(Immutable Blobs)"]
         VALIDATORS["Sui Validators<br/>(Key Servers)"]
     end
 
@@ -764,6 +768,151 @@ export const WORM_PACKAGE_ID = "0x<your_new_package_id>";
 
 ---
 
+## Mainnet Deployment Guide
+
+### Prerequisites for Mainnet Deployment
+
+Before deploying to Sui Mainnet, ensure you have:
+
+1. **Sufficient SUI balance** - At least 10 SUI for gas fees and upgrades
+2. **Updated Sui CLI** - Run `sui client --version` and ensure it's ≥ 1.30.0
+3. **Configured Sui Mainnet RPC** - Set up Sui CLI to use mainnet endpoints:
+
+```bash
+# Configure Sui to use mainnet
+sui client switch --env mainnet
+```
+
+4. **Move contract deployed** - Have a working copy of the Move contract ready
+
+### Step 1: Deploy Move Package to Mainnet
+
+```bash
+# Navigate to the Move package directory
+cd move_worm_final
+
+# Build the package for mainnet
+sui move build
+
+# Deploy to Sui Mainnet
+sui client publish \
+  --gas-budget 200000000 \
+  --execute
+
+# Output example:
+# ┌─────────────────────────────────────────────────────────┐
+# │ Successfully published package with ID:                 │
+# │ 0x49b039b07d3738244258afac14c90364f89d3f68c1ded39a267fdf9c65819156
+# └─────────────────────────────────────────────────────────┘
+```
+
+Save the published **Package ID** — you'll need it in the next step.
+
+### Step 2: Update Frontend Configuration
+
+Update `src/lib/contracts.ts` with your mainnet package ID:
+
+```typescript
+// src/lib/contracts.ts
+export const WORM_PACKAGE_ID = "0x49b039b07d3738244258afac14c90364f89d3f68c1ded39a267fdf9c65819156";
+export const WORM_MODULE = "worm";
+
+export const MAINNET_CONFIG = {
+  RPC_ENDPOINT: "https://fullnode.mainnet.sui.io:443",
+  WALRUS_PUBLISHER: "https://publisher.walrus.space",
+  WALRUS_AGGREGATOR: "https://aggregator.walrus.space",
+  SEAL_KEY_SERVER: "0xe4e8c62a54fb02e9ac92da9b1e60c6e6d29df3e2a4b1e8f5b3d9c1a7e2f4b6d" // Mainnet Seal server
+};
+
+export const TESTNET_CONFIG = {
+  RPC_ENDPOINT: "https://fullnode.testnet.sui.io:443",
+  WALRUS_PUBLISHER: "https://publisher.walrus-testnet.walrus.space",
+  WALRUS_AGGREGATOR: "https://aggregator.walrus-testnet.walrus.space",
+  SEAL_KEY_SERVER: "0x73d05d62c18d9374e3ea529e8e0ed6161da1a141a94d3f76ae3fe4e99356db75"
+};
+
+// Use this function to select the environment
+export function getConfig(isMainnet: boolean = true) {
+  return isMainnet ? MAINNET_CONFIG : TESTNET_CONFIG;
+}
+```
+
+### Step 3: Configure Walrus Mainnet Storage
+
+Update your Walrus endpoints in `src/lib/walrus.ts`:
+
+```typescript
+// src/lib/walrus.ts
+const WALRUS_PUBLISHER_URL = process.env.NEXT_PUBLIC_WALRUS_PUBLISHER || 
+  "https://publisher.walrus.space"; // For mainnet
+
+const WALRUS_AGGREGATOR_URL = process.env.NEXT_PUBLIC_WALRUS_AGGREGATOR || 
+  "https://aggregator.walrus.space"; // For mainnet
+```
+
+### Step 4: Update Environment Variables
+
+Create or update `.env.local`:
+
+```bash
+# Mainnet Configuration
+NEXT_PUBLIC_NETWORK=mainnet
+NEXT_PUBLIC_WALRUS_PUBLISHER=https://publisher.walrus.space
+NEXT_PUBLIC_WALRUS_AGGREGATOR=https://aggregator.walrus.space
+NEXT_PUBLIC_SUI_PACKAGE_ID=0x49b039b07d3738244258afac14c90364f89d3f68c1ded39a267fdf9c65819156
+
+# Optional: Self-hosted Walrus endpoints
+# NEXT_PUBLIC_WALRUS_PUBLISHER=https://walrus.your-domain.site/v1/blobs
+# NEXT_PUBLIC_WALRUS_AGGREGATOR=https://walrus.your-domain.site/v1/blobs
+```
+
+### Step 5: Test Mainnet Functionality
+
+Before full deployment, test with a few sample forms:
+
+```bash
+# Run E2E tests on mainnet
+NEXT_PUBLIC_NETWORK=mainnet npx tsx src/lib/e2e-autonomous.ts
+
+# Or use the verification script
+NEXT_PUBLIC_NETWORK=mainnet npx tsx src/lib/verify-dashboard-settings.ts
+```
+
+### Step 6: Deploy Frontend to Production
+
+```bash
+# Build the application
+npm run build
+
+# Test the build locally
+npm run start
+
+# Deploy to Vercel (or your hosting provider)
+vercel --prod
+```
+
+### Step 7: Verify Mainnet Deployment
+
+1. **Check Package Deployment**: Visit [Suiscan](https://suiscan.xyz/mainnet) and search for your package ID
+2. **Test Form Creation**: Create a test form on mainnet and verify it appears in the dashboard
+3. **Check Walrus Storage**: Verify blob uploads at [Walruscan](https://walruscan.com/mainnet)
+4. **Monitor Gas Usage**: Track transaction costs and optimize if needed
+
+### Mainnet vs Testnet Comparison
+
+| Aspect | Testnet | Mainnet |
+|---|---|---|
+| **Network** | Sui Testnet | Sui Mainnet |
+| **RPC Endpoint** | `fullnode.testnet.sui.io` | `fullnode.mainnet.sui.io` |
+| **Walrus** | Walrus Testnet | Walrus Mainnet |
+| **Real Value** | ❌ No (testnet SUI) | ✅ Yes (real SUI) |
+| **Finality** | Low (~1s) | High (~3-4s) |
+| **Use Case** | Development & Testing | Production |
+| **Reset Schedule** | Periodic resets | Never reset |
+| **Data Permanence** | Temporary | Permanent |
+
+---
+
 ## End-to-End Testing
 
 Worm includes an autonomous E2E verification script that tests the entire stack using the local Sui CLI and Walrus CLI:
@@ -932,6 +1081,396 @@ To grant a team member access to view encrypted responses for a specific form, f
 
 > [!IMPORTANT]
 > You must filter and select the correct form first before adding a decryptor, as the authorization is bound to that specific form's ID on the blockchain.
+
+---
+
+---
+
+## Troubleshooting
+
+### Common Issues & Solutions
+
+#### 1. "Form not found" Error When Accessing Public Link
+
+**Problem**: User cannot access a form via its blob ID link
+
+**Solutions**:
+- Verify the Walrus blob is still accessible:
+  ```bash
+  curl https://aggregator.walrus.space/v1/blobs/<blob_id>
+  ```
+- Check that the form was deployed to the correct Walrus network (Mainnet vs Testnet)
+- Ensure the wallet is connected to the correct Sui network
+- Clear browser cache and localStorage: `localStorage.clear()`
+
+#### 2. "Seal Decryption Failed" or "Access Denied"
+
+**Problem**: Cannot decrypt encrypted responses, even though you're the form creator
+
+**Potential Causes**:
+- **Not an authorized decryptor**: Ensure your wallet is in the `seal_approve` list
+- **Seal SDK version mismatch**: Run `npm list @mysten/seal` to check version
+- **Session key expired**: Try refreshing the page or re-connecting wallet
+- **Key server unreachable**: Verify Sui validators are responding (check [Sui Status](https://status.mainnet.sui.io/))
+
+**Solutions**:
+```typescript
+// Manually authorize decryption
+const response = await client.signAndExecuteTransactionBlock({
+  transactionBlock: tx,
+  chain: 'sui:mainnet',
+});
+```
+
+#### 3. Walrus Upload Fails With "429 Too Many Requests"
+
+**Problem**: Form submissions fail with rate limiting error
+
+**Cause**: Too many concurrent uploads to public Walrus publisher
+
+**Solutions**:
+1. Use self-hosted Walrus infrastructure (recommended for production)
+2. Implement exponential backoff:
+   ```typescript
+   async function uploadWithRetry(data, maxRetries = 3) {
+     for (let i = 0; i < maxRetries; i++) {
+       try {
+         return await uploadToWalrus(data);
+       } catch (e) {
+         if (i < maxRetries - 1) {
+           await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
+         }
+       }
+     }
+   }
+   ```
+
+#### 4. Next.js Build Fails: "Cannot find module '@mysten/seal'"
+
+**Problem**: TypeScript compilation error during build
+
+**Solution**:
+```bash
+npm install --save @mysten/seal@latest
+npm run build
+```
+
+#### 5. Forms Not Appearing in Dashboard
+
+**Problem**: Created forms don't show up in the Admin Dashboard
+
+**Causes**:
+- Sui event indexing hasn't caught up yet
+- Connected to wrong Sui network
+- Event emissions are disabled
+
+**Solutions**:
+1. Wait 30-60 seconds for event finalization
+2. Manually refresh events:
+   ```typescript
+   const forms = await client.queryEvents({
+     query: `${WORM_PACKAGE_ID}::worm::FormCreated`
+   });
+   ```
+3. Check Sui explorer: [https://suiscan.xyz/mainnet](https://suiscan.xyz/mainnet)
+
+#### 6. "Insufficient Gas Budget" Error During Form Creation
+
+**Problem**: Transaction rejected due to insufficient gas
+
+**Solution**:
+```bash
+# Increase gas budget in src/lib/suiActions.ts
+const tx = new Transaction();
+tx.setGasBudget(500_000_000); // Increase from 100M to 500M MIST
+```
+
+#### 7. Rich Text Editor Shows XSS Warning
+
+**Problem**: Rich text content displays with DOMPurify sanitization warnings
+
+**Cause**: Invalid HTML/JavaScript detected in content
+
+**Solution**: Content is automatically sanitized. If legitimate content is being stripped, adjust DOMPurify config:
+```typescript
+// src/components/inputs/RichTextInput.tsx
+const sanitized = DOMPurify.sanitize(html, {
+  ALLOWED_TAGS: ['b', 'i', 'u', 'p', 'br', 'strong', 'em', 'a', 'code', 'pre'],
+  ALLOWED_ATTR: ['href', 'target'],
+});
+```
+
+---
+
+## FAQ
+
+### General Questions
+
+**Q: Is Worm free to use?**
+> A: Yes! Worm is open-source and runs on decentralized infrastructure. You only pay for:
+> - Sui network gas fees (minimal ~$0.01 per form creation)
+> - Walrus storage (paid based on blob size and epochs)
+> - Incentive rewards (if you add SUI to reward respondents)
+
+**Q: Who can see my submitted responses?**
+> A: 
+> - **Plaintext responses**: Anyone with the Walrus blob ID can download (encrypted in transit via HTTPS)
+> - **Encrypted responses**: Only authorized decryptors (specified in `seal_approve`) can decrypt
+> - **Dashboard**: Only form creators and team members can view via Sui wallet authentication
+
+**Q: Can I delete submissions after they're stored?**
+> A: No. Walrus blobs are immutable by design. This is a feature for **permanent audit trails** and prevents tampering. If sensitive data was accidentally submitted, you can:
+> 1. Archive the form (prevent new submissions)
+> 2. Mark the submission as "Archived"
+> 3. Request data removal through your privacy policy
+
+**Q: How long are submissions stored on Walrus?**
+> A: Indefinitely, as long as storage fees are paid. Walrus uses a prepaid storage model — you specify epochs when uploading, and storage persists for that duration.
+
+**Q: Can I use Worm for confidential surveys?**
+> A: Yes, enable Seal encryption in form settings. Responses are threshold-encrypted before upload — even Walrus nodes cannot read plaintext.
+
+**Q: Does Worm work offline?**
+> A: No. Worm requires internet connectivity to:
+> - Connect to Sui blockchain for form discovery
+> - Upload to Walrus storage
+> - Decrypt using Seal SDK (requires validator key servers)
+
+**Q: How many responses can one form collect?**
+> A: Unlimited. Each submission is a separate Walrus blob. The submission index is an append-only list that grows with each response.
+
+### Technical Questions
+
+**Q: What's the difference between Seal encryption and the AES-GCM fallback?**
+> A: 
+> | Feature | Seal SDK | AES-GCM Fallback |
+> |---|---|---|
+> | Key distribution | Threshold crypto (M-of-N validators) | Browser-based (PBKDF2) |
+> | Decryption | On-chain approval required | Local in-browser |
+> | Security | Cryptographic guarantee | Depends on password strength |
+> | Use case | High-security forms | Quick testing |
+
+**Q: Can I migrate from Testnet to Mainnet?**
+> A: Forms created on Testnet cannot be migrated. You must:
+> 1. Recreate forms on Mainnet
+> 2. Update form links in documentation/marketing
+> 3. Archive testnet forms
+
+**Q: How do I set up custom Walrus infrastructure?**
+> A: See [Self-Hosted Walrus Infrastructure](#self-hosted-walrus-infrastructure) section above.
+
+**Q: What happens if a Sui validator goes offline?**
+> A: Seal threshold encryption requires M-of-N validators. If a few validators are offline:
+> - You can still decrypt if ≥M validators are reachable
+> - Decryption may be slower but will retry automatically
+> - If >N-M validators are offline, threshold cannot be reached (rare scenario)
+
+**Q: How do I handle CORS errors when calling Walrus APIs from the browser?**
+> A: Walrus APIs should have CORS enabled. If you see CORS errors:
+> 1. Check that you're using official Walrus endpoints
+> 2. For self-hosted Walrus, add CORS headers:
+>    ```nginx
+>    add_header 'Access-Control-Allow-Origin' '*';
+>    add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, OPTIONS';
+>    ```
+
+**Q: Can I use Worm with a hardware wallet?**
+> A: Yes. Any Sui wallet (hardware or software) compatible with @mysten/dapp-kit works with Worm:
+> - Sui Wallet (Chrome)
+> - Navi Wallet
+> - Martian Wallet
+> - Ledger (via Sui Wallet support)
+
+---
+
+## Performance Optimization
+
+### Frontend Optimization
+
+#### 1. **Lazy Load Heavy Components**
+
+```typescript
+// pages/dashboard/page.tsx
+import dynamic from 'next/dynamic';
+
+const SubmissionDetailsPanel = dynamic(
+  () => import('@/components/SubmissionDetailsPanel'),
+  { loading: () => <Skeleton /> }
+);
+```
+
+#### 2. **Optimize Image Assets**
+
+```typescript
+// Use Next.js Image component
+import Image from 'next/image';
+
+<Image
+  src="/alkimi-hero.avif"
+  alt="Hero"
+  width={1200}
+  height={600}
+  priority // Only for above-fold images
+/>
+```
+
+#### 3. **Reduce Bundle Size**
+
+```bash
+# Analyze bundle
+npm install --save-dev @next/bundle-analyzer
+
+# In next.config.ts
+import withBundleAnalyzer from '@next/bundle-analyzer';
+export default withBundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+})(nextConfig);
+
+# Run analysis
+ANALYZE=true npm run build
+```
+
+#### 4. **Implement Virtual Scrolling for Large Lists**
+
+For dashboards with thousands of submissions:
+
+```typescript
+import { FixedSizeList } from 'react-window';
+
+<FixedSizeList
+  height={600}
+  itemCount={submissions.length}
+  itemSize={60}
+  width="100%"
+>
+  {Row}
+</FixedSizeList>
+```
+
+### Backend/Blockchain Optimization
+
+#### 1. **Batch Walrus Reads**
+
+```typescript
+// DON'T: Sequential reads
+for (let id of blobIds) {
+  const blob = await readFromWalrus(id);
+}
+
+// DO: Parallel reads
+const blobs = await Promise.all(
+  blobIds.map(id => readFromWalrus(id))
+);
+```
+
+#### 2. **Cache Sui Event Queries**
+
+```typescript
+// src/lib/suiActions.ts
+const eventCache = new Map();
+const CACHE_TTL = 60 * 1000; // 1 minute
+
+export async function getFormsWithCache() {
+  const cacheKey = 'all_forms';
+  const cached = eventCache.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+  
+  const forms = await client.queryEvents({ ... });
+  eventCache.set(cacheKey, { data: forms, timestamp: Date.now() });
+  return forms;
+}
+```
+
+#### 3. **Optimize Seal Decryption**
+
+```typescript
+// Decrypt in batches, not sequentially
+async function decryptBatch(encryptedBlobs, batchSize = 5) {
+  for (let i = 0; i < encryptedBlobs.length; i += batchSize) {
+    const batch = encryptedBlobs.slice(i, i + batchSize);
+    await Promise.all(batch.map(blob => seal.decrypt(blob)));
+  }
+}
+```
+
+#### 4. **Reduce Gas Consumption**
+
+```move
+// Move contract optimization
+public fun create_form(
+    title: String,
+    form_blob_id: String,
+    submission_index_blob_id: String,
+    ctx: &mut TxContext
+) {
+    // Use vec![] for team_members if empty
+    let form = Form {
+        id: object::new(ctx),
+        title,
+        form_blob_id,
+        latest_submission_index_blob_id: submission_index_blob_id,
+        creator: tx_context::sender(ctx),
+        team_members: vector::empty(),  // Avoid pre-allocating
+    };
+    transfer::share_object(form);
+}
+```
+
+### Network Optimization
+
+#### 1. **Use Edge Caching**
+
+```typescript
+// next.config.ts
+export default {
+  headers: async () => [
+    {
+      source: '/api/forms/:id',
+      headers: [
+        { key: 'Cache-Control', value: 'public, s-maxage=60, stale-while-revalidate=120' },
+      ],
+    },
+  ],
+};
+```
+
+#### 2. **Enable Compression**
+
+```bash
+# Automatic with Next.js, verify in network tab
+# Response headers should include: Content-Encoding: gzip
+```
+
+#### 3. **Minimize Third-party Scripts**
+
+Current third-parties:
+- DOMPurify (XSS prevention) ✅ Essential
+- PapaParse (CSV export) ✅ Conditionally loaded
+- Tiptap (rich text) ✅ Used on builder page only
+
+---
+
+## Deployment Checklist
+
+Before going live on Mainnet:
+
+- [ ] Update all hardcoded testnet addresses to mainnet
+- [ ] Test E2E flow with mainnet SUI
+- [ ] Verify self-hosted Walrus endpoints are responsive
+- [ ] Set up monitoring for Sui RPC and Walrus endpoints
+- [ ] Configure backup RPC endpoints
+- [ ] Test disaster recovery (image restore, failover)
+- [ ] Document incident response procedures
+- [ ] Set up analytics and error tracking (Sentry)
+- [ ] Test form creation, submission, and decryption on live environment
+- [ ] Conduct security audit of smart contracts
+- [ ] Set up automated backups of form definitions
+- [ ] Create user documentation and tutorials
+- [ ] Announce mainnet launch to community
+- [ ] Monitor gas costs and optimize if necessary
 
 ---
 
