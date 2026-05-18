@@ -55,7 +55,7 @@ export default function OnePagerPage() {
                 Launch App
               </Button>
             </Link>
-            <a href="https://github.com" target="_blank" rel="noopener noreferrer">
+            <a href="https://github.com/pramadanif/walrusform" target="_blank" rel="noopener noreferrer">
               <Button variant="outline" className="!px-12 !py-6 !text-[20px] border-black/10 hover:bg-black/5 transition-colors">
                 GitHub
               </Button>
