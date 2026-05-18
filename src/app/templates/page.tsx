@@ -21,6 +21,39 @@ type Template = {
 
 const TEMPLATES: Template[] = [
   {
+    id: 'walrus-session-2',
+    title: 'Walrus Session 2 - Form tooling',
+    description: 'Please use this form to register your form project',
+    icon: '🐳',
+    color: '#e0f2fe',
+    tag: 'Official',
+    fields: [
+      { type: 'text', label: 'Project name', required: true },
+      { type: 'dropdown', label: 'Please select the session', required: true, options: ['Session 1', 'Session 2'] },
+      { type: 'text', label: 'Team Leader Name', required: true },
+      { type: 'text', label: 'Team Leader Email', required: true },
+      { type: 'checkbox', label: 'Check this if you would be open to receiving our newsletter', required: false },
+      { type: 'text', label: 'Team Leader Telegram Handle', required: false },
+      { type: 'text', label: 'Discord handle', required: true, placeholder: 'Make sure to join our discord since it is required and it is a way for us to contact you. https://discord.gg/walrusprotocol' },
+      { type: 'text', label: 'Country', required: true },
+      { type: 'text', label: 'DeepSurge project Link', required: true, placeholder: 'Needs to be on mainnet' },
+      { type: 'text', label: 'Form Link', required: true },
+      { type: 'checkbox', label: 'I confirm that I have submitted at least one feedback entry through the form tool I built, which includes the same fields as this form. Please make 0xc4d6ee019649edba41d5a5ed1081fe3c86afc41fea413195dd6ecdd0f6090e54 an admin so it can review the application and add other admins.', required: true },
+      { type: 'richtext', label: 'Please describe the workflow and functionalities of your forms', required: true, placeholder: 'E.g. Admin flow-create a form, update form, review replies. User flow: Submit a form' },
+      { type: 'screenshot', label: 'Share any visuals of your form', required: true, placeholder: 'You can upload screenshots, designs, workflow' },
+      { type: 'video', label: 'Demo video of the form (sub 3 minutes)', required: true },
+      { type: 'richtext', label: 'Which features sets your solution a part from the rest?', required: true },
+      { type: 'richtext', label: 'Feedback (about building on Walrus)', required: true, placeholder: 'This can include but not limited to: - What worked well - Any challenges you encountered (e.g. documentation, tooling, infrastructure) - Missing features or functionalities you would like to see - Issues with access (e.g. testnet tokens, setup, onboarding) - Suggestions for improving the developer experience' },
+      { type: 'text', label: 'X account', required: false, placeholder: 'By providing your account, you agree that we may tag you in the winner announcement.' },
+      { type: 'text', label: 'Share link to X tweet', required: true },
+      { type: 'text', label: 'SUI address', required: true },
+      { type: 'richtext', label: 'GitHub', required: true, placeholder: 'Paste a link to your GitHub profiles and relevant repositories.' },
+      { type: 'richtext', label: 'Session Feedback', required: false, placeholder: 'Share any thoughts on the sessions, what worked, what didn\'t, or what could be improved. This feedback is only used to improve future sessions and has no impact on rewards or participation.' },
+      { type: 'richtext', label: 'DeepSurge Feedback', required: false, placeholder: 'Share any thoughts on DeepSurge, what worked, what didn\'t, or what could be improved. This feedback is only used to improve future DeepSurge and has no impact on rewards or participation.' },
+      { type: 'checkbox', label: 'I confirm that I have read, understood, and agree to the rules and regulations of the session.', required: true, placeholder: 'https://thewalrussessions.wal.app/' }
+    ]
+  },
+  {
     id: 'feedback',
     title: 'Community Feedback',
     description: 'Collect structured feedback from your protocol users or DAO members.',

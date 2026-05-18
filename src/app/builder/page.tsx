@@ -10,7 +10,7 @@ import Navbar from '@/components/Navbar';
 import { saveFormDefinition, FormDefinition, FormField, getSealWallets } from '@/lib/formStorage';
 import { getExplorerUrl, uploadToWalrus } from '@/lib/walrus';
 import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
-import { createFormTx, setupTeamAndSealTx, createIncentivizedFormTx } from '@/lib/suiActions';
+import { createFormTx, setupTeamAndSealTx, createIncentivizedFormTx, setFormExpirationTx } from '@/lib/suiActions';
 
 const FIELD_TYPES = [
   { id: 'richtext', label: 'Rich Text', icon: 'T', color: '#cdb4ff' },
@@ -47,7 +47,10 @@ export default function BuilderPage() {
 
   const [formTitle, setFormTitle] = useState(() => initialDraft?.title ?? 'Untitled Session');
   const [formDescription, setFormDescription] = useState(() => initialDraft?.description ?? '');
+  const [bannerUrl, setBannerUrl] = useState('');
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const [fields, setFields] = useState<FormField[]>(() => initialDraft?.fields ?? []);
+  const [expirationDate, setExpirationDate] = useState('');
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(
     () => initialDraft?.fields?.[0]?.id ?? null
   );
@@ -134,6 +137,23 @@ export default function BuilderPage() {
     setDropdownOptionsInput(field?.type === 'dropdown' ? (field.options ?? []).join('\n') : '');
   };
 
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingBanner(true);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await uploadToWalrus(arrayBuffer, { contentType: file.type });
+      setBannerUrl(result.blobUrl);
+      addLog("Banner uploaded to Walrus!", "walrus");
+    } catch (err: any) {
+      alert("Failed to upload banner: " + err.message);
+    } finally {
+      setIsUploadingBanner(false);
+    }
+  };
+
   // ── Deploy to Walrus ────────────────────────────────────────────────────────
   const handleDeployToWalrus = async () => {
     setDeployError(null);
@@ -152,7 +172,10 @@ export default function BuilderPage() {
     
     try {
       const sealWallets = getSealWallets();
-      const encryptWithSeal = sealWallets.length > 0;
+      if (account?.address && !sealWallets.includes(account.address)) {
+        sealWallets.push(account.address);
+      }
+      const encryptWithSeal = sealEnabled && sealWallets.length > 0;
 
       const form: FormDefinition = {
         id: crypto.randomUUID(),
@@ -160,6 +183,7 @@ export default function BuilderPage() {
         description: formDescription.trim() || undefined,
         fields,
         createdAt: new Date().toISOString(),
+        bannerUrl: bannerUrl.trim() || undefined,
         settings: {
           requireWallet: false,
           encryptWithSeal,
@@ -220,28 +244,50 @@ export default function BuilderPage() {
             setShareableLink(link);
             addLog("On-chain registration confirmed.", "sui");
 
-            // If Seal is enabled, register the access policy on-chain
-            if (sealEnabled && decryptorList.length > 0 && formObjectId) {
-              addLog(`Registering Seal policy and Team for ${decryptorList.length} member(s)...`, "seal");
+            const runSealPolicy = () => {
+              if (sealEnabled && decryptorList.length > 0 && formObjectId) {
+                addLog(`Registering Seal policy and Team for ${decryptorList.length} member(s)...`, "seal");
+                signAndExecute({
+                  transaction: setupTeamAndSealTx(formObjectId, decryptorList),
+                }, {
+                  onSuccess: () => {
+                    addLog("Seal policy and Team registered on-chain. ✓", "done");
+                    setDeployStage('idle');
+                    setIsDeploying(false);
+                  },
+                  onError: (err) => {
+                    console.warn('[Builder] seal_approve failed:', err);
+                    addLog("Seal policy tx failed — Walrus blob still secured.", "seal");
+                    setDeployStage('idle');
+                    setIsDeploying(false);
+                  }
+                });
+              } else {
+                addLog("System ready.", "done");
+                setDeployStage('idle');
+                setIsDeploying(false);
+              }
+            };
+
+            // If Expiration is set, register it on-chain
+            if (expirationDate && formObjectId) {
+              addLog("Setting form expiration on-chain...", "sui");
+              const expiresAtMs = new Date(expirationDate).getTime();
               signAndExecute({
-                transaction: setupTeamAndSealTx(formObjectId, decryptorList),
+                transaction: setFormExpirationTx(formObjectId, expiresAtMs),
               }, {
                 onSuccess: () => {
-                  addLog("Seal policy and Team registered on-chain. ✓", "done");
-                  setDeployStage('idle');
-                  setIsDeploying(false);
+                  addLog("Form expiration set on-chain. ✓", "done");
+                  runSealPolicy();
                 },
                 onError: (err) => {
-                  console.warn('[Builder] seal_approve failed:', err);
-                  addLog("Seal policy tx failed — Walrus blob still secured.", "seal");
-                  setDeployStage('idle');
-                  setIsDeploying(false);
+                  console.warn('[Builder] set_form_expiration failed:', err);
+                  addLog("Set expiration failed.", "sui");
+                  runSealPolicy(); // Continue to Seal anyway
                 }
               });
             } else {
-              addLog("System ready.", "done");
-              setDeployStage('idle');
-              setIsDeploying(false);
+              runSealPolicy();
             }
           },
           onError: (err) => {
@@ -337,32 +383,8 @@ export default function BuilderPage() {
           {/* Left Sidebar: Components */}
           <aside className="w-[320px] flex flex-col gap-6 overflow-hidden">
             <GlassCard className="flex-1 flex flex-col !p-8 !rounded-[40px] shadow-2xl overflow-y-auto custom-scrollbar border-white/40">
-              <h3 className="text-[11px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-6">Components</h3>
-              <div className="grid grid-cols-1 gap-3 mb-10">
-                {FIELD_TYPES.map((type) => (
-                  <motion.button
-                    key={type.id}
-                    whileHover={{ x: 4 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => addField(type)}
-                    className="flex items-center gap-4 p-4 rounded-2xl bg-white/50 border border-black/5 hover:border-[#cdb4ff] hover:bg-white transition-all group text-left shadow-sm hover:shadow-md"
-                  >
-                    <div
-                      className="w-10 h-10 flex items-center justify-center rounded-xl font-bold transition-all group-hover:scale-110"
-                      style={{ backgroundColor: `${type.color}40`, color: '#4a2e8c' }}
-                    >
-                      {type.icon}
-                    </div>
-                    <span className="font-jakarta font-bold text-[14px] text-gray-600 group-hover:text-black">{type.label}</span>
-                    <svg className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-[#4a2e8c]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                      <path d="M12 5v14M5 12h14" />
-                    </svg>
-                  </motion.button>
-                ))}
-              </div>
-              {/* Activity Log */}
               {activityLog.length > 0 && (
-                <div className="mt-auto pt-6 border-t border-black/5">
+                <div className="mb-6 pb-6 border-b border-black/5">
                   <h3 className="text-[9px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-4">Activity Log</h3>
                   <div className="flex flex-col gap-2">
                     <AnimatePresence mode="popLayout">
@@ -393,12 +415,101 @@ export default function BuilderPage() {
                   </div>
                 </div>
               )}
+              <h3 className="text-[11px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-6">Components</h3>
+              <div className="grid grid-cols-1 gap-3 mb-10">
+                {FIELD_TYPES.map((type) => (
+                  <motion.button
+                    key={type.id}
+                    whileHover={{ x: 4 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => addField(type)}
+                    className="flex items-center gap-4 p-4 rounded-2xl bg-white/50 border border-black/5 hover:border-[#cdb4ff] hover:bg-white transition-all group text-left shadow-sm hover:shadow-md"
+                  >
+                    <div
+                      className="w-10 h-10 flex items-center justify-center rounded-xl font-bold transition-all group-hover:scale-110"
+                      style={{ backgroundColor: `${type.color}40`, color: '#4a2e8c' }}
+                    >
+                      {type.icon}
+                    </div>
+                    <span className="font-jakarta font-bold text-[14px] text-gray-600 group-hover:text-black">{type.label}</span>
+                    <svg className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-[#4a2e8c]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </motion.button>
+                ))}
+              </div>
             </GlassCard>
           </aside>
 
           {/* Center Canvas */}
           <main className="flex-1 overflow-y-auto custom-scrollbar relative px-4">
             <div className="max-w-3xl mx-auto">
+              {deployedBlobId && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-6 p-6 bg-green-50 border border-green-200 rounded-[24px] flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-600">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                    </div>
+                    <div>
+                      <h4 className="font-outfit font-bold text-green-800">Deployed Successfully!</h4>
+                      <p className="font-jakarta text-xs text-green-600 mt-0.5">Your form is live and ready to collect feedback.</p>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    className="!py-2 !px-4 !text-xs border-green-200 text-green-700 hover:bg-green-100"
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        navigator.clipboard.writeText(`${window.location.origin}/form/${deployedBlobId}`);
+                        alert('Link copied to clipboard!');
+                      }
+                    }}
+                  >
+                    Copy Link
+                  </Button>
+                </motion.div>
+              )}
+
+              {/* Form Banner */}
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-6"
+              >
+                <div className="relative group flex gap-3">
+                  <input
+                    value={bannerUrl}
+                    onChange={(e) => setBannerUrl(e.target.value)}
+                    placeholder="Paste banner image URL or upload…"
+                    className="flex-1 bg-white/40 border border-black/5 rounded-[24px] px-8 py-4 font-jakarta font-medium text-gray-600 text-sm outline-none focus:border-[#cdb4ff] focus:bg-white/80 transition-all placeholder:text-gray-400 shadow-sm"
+                  />
+                  <input
+                    type="file"
+                    id="banner-upload"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleBannerUpload}
+                  />
+                  <Button 
+                    variant="ghost" 
+                    className="!py-4 !px-6 !text-xs border-black/5 bg-white/40 hover:bg-white/80 text-black"
+                    onClick={() => document.getElementById('banner-upload')?.click()}
+                    disabled={isUploadingBanner}
+                  >
+                    {isUploadingBanner ? 'Uploading...' : 'Upload'}
+                  </Button>
+                  {bannerUrl && (
+                    <div className="mt-4 rounded-xl overflow-hidden border border-black/5 shadow-sm max-h-32 flex items-center justify-center bg-gray-50">
+                      <img src={bannerUrl} alt="Banner Preview" className="w-full h-full object-cover" onError={(e) => (e.target as HTMLImageElement).style.display = 'none'} />
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+
               {/* Form Description */}
               <motion.div 
                 initial={{ opacity: 0, y: 10 }}
@@ -699,6 +810,23 @@ export default function BuilderPage() {
                             </motion.div>
                           )}
                         </AnimatePresence>
+                      </div>
+                    </div>
+
+                    {/* Expiration Date */}
+                    <div className="mb-8">
+                      <h4 className="text-[10px] font-jakarta font-bold text-gray-400 uppercase tracking-widest mb-6">Expiration</h4>
+                      <div className="p-8 rounded-[32px] border border-black/5 bg-white/50 backdrop-blur-sm">
+                        <label className="text-[11px] font-jakarta font-bold text-gray-700 uppercase tracking-widest mb-2 block">Expires At</label>
+                        <input
+                          type="datetime-local"
+                          value={expirationDate}
+                          onChange={(e) => setExpirationDate(e.target.value)}
+                          className="w-full bg-transparent border-b border-black/10 py-2 font-jakarta text-sm outline-none focus:border-[#4a2e8c] transition-colors"
+                        />
+                        <p className="text-[10px] text-gray-400 font-jakarta mt-2">
+                          Form will be closed for submissions after this date.
+                        </p>
                       </div>
                     </div>
 

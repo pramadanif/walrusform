@@ -113,3 +113,27 @@ export const Badge = ({ children, color = "purple", className = "" }: { children
   );
 };
 
+export const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean, onClose: () => void, title: string, children: React.ReactNode }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="bg-white rounded-[32px] p-8 max-w-md w-full shadow-2xl border border-white/40"
+      >
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-outfit font-bold text-black">{title}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-black transition-colors">
+            ✕
+          </button>
+        </div>
+        <div className="font-jakarta text-sm text-gray-600 leading-relaxed">
+          {children}
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+

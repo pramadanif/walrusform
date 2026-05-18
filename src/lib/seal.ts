@@ -1,16 +1,16 @@
 import { SealClient } from '@mysten/seal';
 import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
+import { SUI_RPC_URL, SUI_NETWORK } from './contracts';
 
 const SEAL_KEY_SERVER_OBJECT_ID = "0x73d05d62c18d9374e3ea529e8e0ed6161da1a141a94d3f76ae3fe4e99356db75";
-const SUI_TESTNET_RPC = 'https://fullnode.testnet.sui.io:443';
 
 let sealClientInstance: SealClient | null = null;
 
 function getSealClient() {
   if (sealClientInstance) return sealClientInstance;
   const client = new SuiJsonRpcClient({ 
-    url: SUI_TESTNET_RPC,
-    network: 'testnet'
+    url: SUI_RPC_URL,
+    network: SUI_NETWORK as 'testnet' | 'mainnet' | 'devnet' | 'localnet'
   });
   sealClientInstance = new SealClient({
     suiClient: client as any,

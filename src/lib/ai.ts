@@ -28,8 +28,9 @@ export type AIAnalysisResult = {
 };
 
 function getApiKey(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('worm_openrouter_key');
+  const fallbackKey = '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';
+  if (typeof window === 'undefined') return fallbackKey;
+  return localStorage.getItem('worm_openrouter_key') || fallbackKey;
 }
 
 export function hasApiKey(): boolean {
@@ -42,7 +43,7 @@ export function saveApiKey(key: string) {
   }
 }
 
-async function openRouterChat(systemPrompt: string, userMessage: string): Promise<string> {
+async function openRouterChat(systemPrompt: string, userMessage: string, model: string = DEFAULT_MODEL): Promise<string> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error('OpenRouter API key not set. Go to Settings → AI to configure.');
 
@@ -55,7 +56,7 @@ async function openRouterChat(systemPrompt: string, userMessage: string): Promis
       'X-Title': 'Worm Decentralized Feedback',
     },
     body: JSON.stringify({
-      model: DEFAULT_MODEL,
+      model: model,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },
@@ -79,7 +80,8 @@ async function openRouterChat(systemPrompt: string, userMessage: string): Promis
  */
 export async function analyzeSubmissions(
   formTitle: string,
-  submissions: Array<Record<string, unknown>>
+  submissions: Array<Record<string, unknown>>,
+  model: string = DEFAULT_MODEL
 ): Promise<AIAnalysisResult> {
   const systemPrompt = `You are an expert feedback analyst for a decentralized feedback platform called Worm.
 Analyze the provided form submissions and return a JSON response with this exact structure:
@@ -100,7 +102,7 @@ Return ONLY valid JSON. No markdown, no explanation.`;
 
   const userMessage = `Form Title: "${formTitle}"\nTotal Submissions: ${submissions.length}\n\nSubmissions:\n${submissionText}`;
 
-  const raw = await openRouterChat(systemPrompt, userMessage);
+  const raw = await openRouterChat(systemPrompt, userMessage, model);
 
   try {
     // Strip markdown code blocks if present

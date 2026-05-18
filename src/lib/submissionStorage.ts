@@ -21,6 +21,7 @@ export interface AdminMeta {
   adminNote?: string;
   priority?: 'low' | 'medium' | 'high';
   status?: 'New' | 'In Review' | 'Actioned' | 'Archived';
+  rank?: number;
 }
 
 // ─── Admin metadata (localStorage — immutable blob can't be updated) ──────────
@@ -138,6 +139,7 @@ export async function getSubmissionsForForm(
             admin = {
               status: (content.fields.value.fields.status || 'New') as AdminMeta['status'],
               adminNote: content.fields.value.fields.note || '',
+              rank: content.fields.value.fields.rank || 0,
             };
           }
         } catch (e) {

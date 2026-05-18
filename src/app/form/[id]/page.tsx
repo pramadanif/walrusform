@@ -228,6 +228,12 @@ export default function PublicFormPage({ params }: PageProps) {
           animate={{ y: 0, opacity: 1 }}
           className="mb-16 relative"
         >
+          {formDef.bannerUrl && (
+            <div className="mb-8 rounded-[32px] overflow-hidden border border-black/5 shadow-sm max-h-64 flex items-center justify-center bg-gray-50">
+              <img src={formDef.bannerUrl} alt="Form Banner" className="w-full h-full object-cover" />
+            </div>
+          )}
+
           <div className="flex justify-between items-start mb-10">
             <div className="flex-1 pr-8">
               <div className="mb-4">
