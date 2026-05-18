@@ -16,7 +16,7 @@ export const WALRUS_EXPLORER_BASE = IS_MAINNET
   : 'https://walruscan.com/testnet/blob';
 
 export const WORM_PACKAGE_ID = IS_MAINNET
-  ? process.env.NEXT_PUBLIC_MAINNET_PACKAGE_ID || "0x0"
+  ? process.env.NEXT_PUBLIC_MAINNET_PACKAGE_ID || "0x49b039b07d3738244258afac14c90364f89d3f68c1ded39a267fdf9c65819156"
   : "0x9752e3c1a621d17526b1bbe75ee0098151b3f392ce71035f39c0b835fc7a665b";
 
 export const WORM_MODULE = "worm";

@@ -80,6 +80,7 @@ export default function SettingsPage() {
     if (typeof window === 'undefined') return '';
     return localStorage.getItem('worm_openrouter_key') ?? '';
   });
+  const [showApiKey, setShowApiKey] = useState(false);
   const [selectedModel, setSelectedModel] = useState(() => {
     if (typeof window === 'undefined') return 'deepseek/deepseek-v4-flash:free';
     return localStorage.getItem('worm_default_model') ?? 'deepseek/deepseek-v4-flash:free';
@@ -333,7 +334,7 @@ export default function SettingsPage() {
                         <label className="text-[11px] font-jakarta font-bold text-gray-400 uppercase tracking-widest ml-1 block mb-3">OpenRouter API Key</label>
                         <div className="flex gap-4 p-2 bg-white rounded-[28px] border border-black/5 shadow-inner">
                           <input
-                            type="password"
+                            type={showApiKey ? "text" : "password"}
                             placeholder="sk-or-v1-..."
                             value={openRouterKey}
                             onChange={(e) => {
@@ -342,6 +343,13 @@ export default function SettingsPage() {
                             }}
                             className="flex-1 bg-transparent border-none outline-none px-6 font-mono text-sm text-black placeholder:text-gray-300"
                           />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="px-3 text-gray-400 hover:text-[#4a2e8c] transition-colors font-jakarta font-bold text-xs uppercase"
+                          >
+                            {showApiKey ? 'Hide' : 'Show'}
+                          </button>
                           <Button 
                             className="!rounded-full !px-8 !py-3" 
                             onClick={() => {
