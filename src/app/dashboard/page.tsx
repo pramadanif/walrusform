@@ -528,33 +528,45 @@ export default function DashboardPage() {
             <motion.div 
               initial={{ x: 20, opacity: 0 }} 
               animate={{ x: 0, opacity: 1 }}
-              className="flex items-center gap-4"
+              className="flex items-center gap-3"
             >
-              <div className="glass-card !py-2.5 !px-6 !rounded-full border-black/5 flex items-center gap-4 bg-white/60">
-                <span className="text-[10px] font-jakarta font-bold text-gray-400 uppercase tracking-widest">Filter:</span>
-                <select
-                  className="bg-transparent font-jakarta font-bold text-[13px] outline-none cursor-pointer text-[#4a2e8c]"
-                  value={selectedFormId}
-                  onChange={(e) => setSelectedFormId(e.target.value as string)}
-                >
-                  <option value="all">All Sessions</option>
-                  {forms.map((form) => (
-                    <option key={form._blobId} value={form._blobId}>{form.title}</option>
-                  ))}
-                </select>
+              <div className="relative flex items-center">
+                <div className="glass-card !py-3 !px-5 !rounded-full border-black/5 flex items-center gap-3 bg-white/60">
+                  <span className="text-[10px] font-jakarta font-bold text-gray-400 uppercase tracking-widest">Filter:</span>
+                  <select
+                    className="bg-transparent font-jakarta font-bold text-[13px] outline-none cursor-pointer text-[#4a2e8c]"
+                    value={selectedFormId}
+                    onChange={(e) => setSelectedFormId(e.target.value as string)}
+                  >
+                    <option value="all">All Sessions</option>
+                    {forms.map((form) => (
+                      <option key={form._blobId} value={form._blobId}>{form.title}</option>
+                    ))}
+                  </select>
+                </div>
+                {selectedFormId === 'all' && (
+                  <span className="absolute top-[110%] left-5 text-[10px] font-jakarta font-medium text-gray-400 whitespace-nowrap">
+                    *Select session to enable add team
+                  </span>
+                )}
               </div>
-              <Button variant="ghost" onClick={handleExportCSV} className="shadow-sm border-black/5 !px-8">
+              <Button variant="ghost" onClick={handleExportCSV} className="shadow-sm border-black/5 !px-6">
                 Export
               </Button>
-              {selectedFormId !== 'all' && (
-                <Button variant="ghost" onClick={handleAddTeamMember} className="shadow-sm border-black/5 !px-8">
+              <div className="flex" title={selectedFormId === 'all' ? "Select session to enable add team" : ""}>
+                <Button 
+                  variant="ghost" 
+                  onClick={handleAddTeamMember} 
+                  className={`shadow-sm border-black/5 !px-6 ${selectedFormId === 'all' ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  disabled={selectedFormId === 'all'}
+                >
                   Add Team
                 </Button>
-              )}
+              </div>
               <Button 
                 variant="ghost" 
                 onClick={runAIAnalysis} 
-                className="shadow-sm border-black/5 !px-8 flex items-center gap-2 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200/50 shadow-[0_0_15px_rgba(124,58,237,0.1)] transition-all duration-300"
+                className="shadow-sm border-black/5 !px-6 flex items-center gap-2 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200/50 shadow-[0_0_15px_rgba(124,58,237,0.1)] transition-all duration-300"
                 disabled={aiLoading}
               >
                 {aiLoading && (
@@ -562,7 +574,7 @@ export default function DashboardPage() {
                 )}
                 <span className="font-outfit font-bold bg-gradient-to-r from-[#4a2e8c] to-[#7c3aed] bg-clip-text text-transparent">AI Insights</span>
               </Button>
-              <Button variant="purple" onClick={() => router.push('/builder')} className="shadow-2xl !px-10">New Session +</Button>
+              <Button variant="purple" onClick={() => router.push('/builder')} className="shadow-2xl !px-8">New Session +</Button>
             </motion.div>
           </div>
 

@@ -27,7 +27,7 @@ export const Button = ({
   loading?: boolean,
   icon?: React.ReactNode
 }) => {
-  const baseStyles = "relative px-6 py-3 rounded-full font-outfit font-bold transition-all duration-300 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:pointer-events-none overflow-hidden group";
+  const baseStyles = "relative px-6 py-3 rounded-full font-outfit font-bold transition-all duration-300 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:pointer-events-none overflow-hidden group whitespace-nowrap flex-shrink-0";
   
   const variants = {
     primary: "bg-black text-white hover:bg-black/90 shadow-[0_4px_0_0_rgba(0,0,0,0.1)] hover:shadow-[0_6px_0_0_rgba(0,0,0,0.1)] hover:-translate-y-[2px]",
