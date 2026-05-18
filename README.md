@@ -857,6 +857,59 @@ gantt
 
 ---
 
+## Self-Hosted Walrus Infrastructure
+
+To ensure absolute independence and high reliability on the Mainnet, we have deployed our own dedicated Walrus Publisher and Aggregator nodes. This allows our platform to operate without relying on public community nodes that may be rate-limited or unavailable.
+
+### Proof of Deployment & Operation
+
+Here is the proof of a successful blob upload to our self-hosted Mainnet publisher:
+
+```bash
+$ curl -X PUT "https://walrus.********.site/v1/blobs?epochs=1" \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary "hello walrus mainnet"
+
+{
+  "newlyCreated": {
+    "blobObject": {
+      "id": "0xdcb53a5651d570e7910bde9e3002607474b49be469a8c791e3f8a880d3cc82e4",
+      "registeredEpoch": 30,
+      "blobId": "oPZg5tuyn1UD_xK4Fqknv2DhtkXATJxjk4VdCC3F_EQ",
+      "size": 20,
+      "encodingType": "RS2",
+      "certifiedEpoch": null,
+      "storage": {
+        "id": "0x15ef24bd2141273fb130ff94b9ff253c964a2103a27bc37d993a42740bc75042",
+        "startEpoch": 30,
+        "endEpoch": 31,
+        "storageSize": 66034000
+      },
+      "deletable": true
+    },
+    "resourceOperation": {
+      "registerFromScratch": {
+        "encodedLength": 66034000,
+        "epochsAhead": 1
+      }
+    },
+    "cost": 5250294
+  }
+}
+```
+
+> [!NOTE]
+> The private key used by the publisher to sign storage transactions is kept secret and secured on our VPS for security. Domain names are masked in this public documentation to prevent abuse.
+
+### Endpoints
+
+Our custom infrastructure can be accessed at:
+- **Publisher**: `https://walrus.********.site/v1/blobs`
+- **Aggregator**: `https://walrus.********.site/v1/blobs/<blob_id>`
+- **API Docs**: `https://walrus.********.site/v1/api`
+
+---
+
 ## Contributing
 
 1. **Fork** the repository
