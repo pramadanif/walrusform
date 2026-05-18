@@ -25,7 +25,7 @@ const FIELD_TYPES = [
 
 // Using getSealWallets from @/lib/formStorage
 
-export default function BuilderPage() {
+function BuilderContent() {
   const account = useCurrentAccount();
   const client = useSuiClient();
   const searchParams = useSearchParams();
@@ -913,6 +913,14 @@ export default function BuilderPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function BuilderPage() {
+  return (
+    <React.Suspense fallback={<div>Loading...</div>}>
+      <BuilderContent />
+    </React.Suspense>
   );
 }
 
